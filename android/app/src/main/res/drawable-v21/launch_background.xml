@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- LidaPay Launch Splash Screen (Android 5.0+) -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Background gradient -->
+    <item android:drawable="@drawable/splash_background" />
+
+    <!-- Lidapay Logo - centered with proper size -->
+    <item
+        android:width="200dp"
+        android:height="200dp"
+        android:gravity="center">
+        <bitmap
+            android:gravity="fill"
+            android:src="@drawable/launch_logo" />
+    </item>
+</layer-list>

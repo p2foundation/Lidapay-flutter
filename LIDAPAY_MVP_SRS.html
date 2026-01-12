@@ -1,0 +1,894 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>LidaPay MVP SRS</title>
+  <style>
+    body { font-family: Segoe UI, Arial, sans-serif; line-height: 1.45; margin: 40px; color: #0f172a; }
+    h1, h2, h3, h4 { color: #0f172a; }
+    pre, code { font-family: Consolas, monospace; }
+    pre { background: #f1f5f9; padding: 12px; border-radius: 8px; overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; }
+    table, th, td { border: 1px solid #cbd5e1; }
+    th, td { padding: 8px; vertical-align: top; }
+    hr { border: 0; border-top: 1px solid #cbd5e1; margin: 24px 0; }
+  </style>
+</head>
+<body>
+<h1 id="lidapay-mobile-app-mvp-software-requirements-specification">LidaPay Mobile App - MVP Software Requirements Specification</h1>
+<h2 id="document-information">Document Information</h2>
+<table>
+<thead>
+<tr>
+<th><strong>Document Version</strong></th>
+<th>1.0</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Date</strong></td>
+<td>January 8, 2026</td>
+</tr>
+<tr>
+<td><strong>Author</strong></td>
+<td>Development Team</td>
+</tr>
+<tr>
+<td><strong>Project</strong></td>
+<td>LidaPay Mobile Application</td>
+</tr>
+<tr>
+<td><strong>Target Platform</strong></td>
+<td>Flutter (iOS &amp; Android)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="introduction">1. Introduction</h2>
+<h3 id="purpose">1.1 Purpose</h3>
+<p>This document defines the functional and non-functional requirements for the LidaPay Mobile Application Minimum Viable Product (MVP). LidaPay is a mobile application designed for international and local airtime and internet data remittance, specifically targeting the Ghana market.</p>
+<h3 id="scope">1.2 Scope</h3>
+<p>The MVP will focus on core functionalities that enable users to:</p>
+<ul>
+<li>Register and authenticate securely</li>
+<li>Purchase airtime for Ghanaian mobile networks</li>
+<li>Purchase data bundles for Ghanaian mobile networks</li>
+<li>Manage transactions and view history</li>
+<li>Handle payments securely</li>
+</ul>
+<h3 id="target-audience">1.3 Target Audience</h3>
+<ul>
+<li><strong>Primary</strong>: Users in Ghana requiring airtime/data services</li>
+<li><strong>Secondary</strong>: Ghanaians living abroad sending airtime/data to family/friends</li>
+<li><strong>Age Range</strong>: 16+ years</li>
+<li><strong>Technical Proficiency</strong>: Basic to intermediate mobile app users</li>
+</ul>
+<h3 id="business-objectives">1.4 Business Objectives</h3>
+<ul>
+<li>Provide fast, reliable airtime and data remittance services</li>
+<li>Support all major Ghanaian mobile networks</li>
+<li>Ensure secure payment processing</li>
+<li>Achieve 99.9% service availability</li>
+<li>Scale to 10,000+ concurrent users</li>
+</ul>
+<hr />
+<h2 id="system-overview">2. System Overview</h2>
+<h3 id="application-architecture">2.1 Application Architecture</h3>
+<ul>
+<li><strong>Frontend</strong>: Flutter 3.x with Dart null-safety</li>
+<li><strong>State Management</strong>: Riverpod</li>
+<li><strong>Navigation</strong>: go_router</li>
+<li><strong>Networking</strong>: Dio with Retrofit</li>
+<li><strong>Local Storage</strong>: SharedPreferences</li>
+<li><strong>Backend Integration</strong>: NestJS API at <code>https://api.advansistechnologies.com</code></li>
+</ul>
+<h3 id="supported-platforms">2.2 Supported Platforms</h3>
+<ul>
+<li><strong>Android</strong>: Minimum SDK 21 (Android 5.0) - Target SDK 34</li>
+<li><strong>iOS</strong>: Minimum iOS 12.0 - Target iOS 17.0</li>
+</ul>
+<h3 id="external-integrations">2.3 External Integrations</h3>
+<ul>
+<li><strong>Reloadly Global API</strong>: International airtime purchases</li>
+<li><strong>Prymo API</strong>: Ghana local airtime purchases</li>
+<li><strong>ExpressPay Ghana</strong>: Payment gateway processing</li>
+</ul>
+<h3 id="architecture-design-mvp">2.4 Architecture Design (MVP)</h3>
+<h4 id="logical-architecture-layered">2.4.1 Logical Architecture (Layered)</h4>
+<p>The MVP follows a layered architecture aligned with the project structure:</p>
+<pre><code class="language-markdown">Presentation Layer (Flutter UI)
+  - Screens / Widgets (Features: Auth, Dashboard, Airtime/Data, Transactions, Settings)
+  - State Management (Riverpod Providers / Notifiers)
+
+Domain Layer (Business Rules)
+  - Entities (User, Transaction, Purchase)
+  - Use-cases (Login, Purchase Airtime, Purchase Data, Verify Payment, Fetch Transactions)
+
+Data Layer (Integration)
+  - Repositories (AuthRepository, AirtimeRepository, DataRepository, PaymentRepository, TransactionsRepository)
+  - Remote Datasources (Retrofit/Dio API Client)
+  - Local Storage (SharedPreferences for tokens and basic preferences)
+</code></pre>
+<h4 id="system-context-mvp">2.4.2 System Context (MVP)</h4>
+<pre><code class="language-markdown">+-------------------+        HTTPS         +------------------------------+
+|  LidaPay Mobile   | ------------------&gt;  |  LidaPay Backend (NestJS API) |
+|  (Flutter iOS/Android)                  |  https://api.advansistechnologies.com |
++-------------------+                     +---------------+--------------+
+                                                      |
+                                                      | Outbound Integrations
+                                                      v
+                                   +------------------+------------------+
+                                   |   External Providers                |
+                                   | - Reloadly (Global Airtime/Data)    |
+                                   | - Prymo (Ghana Airtime/Data)        |
+                                   | - ExpressPay (Payments)             |
+                                   +-------------------------------------+
+</code></pre>
+<h4 id="deployment-view-mvp">2.4.3 Deployment View (MVP)</h4>
+<ul>
+<li><strong>Mobile App</strong>: Flutter app running on iOS/Android</li>
+<li><strong>API</strong>: NestJS backend exposed over HTTPS</li>
+<li><strong>External Providers</strong>: Reloadly/Prymo/ExpressPay accessed by the backend</li>
+<li><strong>Storage</strong>:
+<ul>
+<li>Mobile: SharedPreferences (tokens, preferences)</li>
+<li>Backend: Database and provider integrations (out of scope for mobile MVP SRS)</li>
+</ul>
+</li>
+</ul>
+<h4 id="key-sequence-flows-mvp">2.4.4 Key Sequence Flows (MVP)</h4>
+<p><strong>A. Login &amp; Token Refresh</strong></p>
+<pre><code class="language-markdown">User -&gt; Mobile App: Enter credentials
+Mobile App -&gt; Backend: POST /api/v1/users/login
+Backend -&gt; Mobile App: access_token + refresh_token + user
+Mobile App: Store tokens securely (local encrypted storage strategy recommended)
+Mobile App -&gt; Backend (later): POST /api/v1/auth/refresh (when access token expires)
+</code></pre>
+<p><strong>B. Airtime/Data Purchase (Payment + Fulfillment)</strong></p>
+<pre><code class="language-markdown">User -&gt; Mobile App: Select recipient, product, amount
+Mobile App -&gt; Backend: POST /api/v1/payment/expresspay/initiate
+Backend -&gt; Mobile App: Payment URL / payment reference
+Mobile App -&gt; ExpressPay (WebView/Browser): User completes payment
+Mobile App -&gt; Backend: POST /api/v1/payment/expresspay/verify
+Backend -&gt; Provider (Reloadly/Prymo): Fulfill airtime/data
+Backend -&gt; Mobile App: Transaction result + receipt
+</code></pre>
+<hr />
+<h2 id="functional-requirements">3. Functional Requirements</h2>
+<h3 id="user-authentication-priority-high">3.1 User Authentication (Priority: High)</h3>
+<h4 id="user-registration">3.1.1 User Registration</h4>
+<ul>
+<li><strong>Requirement</strong>: Users must be able to create a new account</li>
+<li><strong>Input Fields</strong>:
+<ul>
+<li>First Name (required, max 50 chars)</li>
+<li>Last Name (required, max 50 chars)</li>
+<li>Email (required, valid email format)</li>
+<li>Phone Number (required, Ghana format: +233XXXXXXXXX)</li>
+<li>Password (required, min 8 chars, 1 uppercase, 1 number, 1 special char)</li>
+<li>Country (required, default: Ghana)</li>
+<li>Account Type (required: User/Merchant/Agent)</li>
+</ul>
+</li>
+<li><strong>Validation</strong>: Real-time field validation with error messages</li>
+<li><strong>API Endpoint</strong>: <code>POST /api/v1/users/register</code></li>
+<li><strong>Success Response</strong>: User object with profile data</li>
+<li><strong>Error Handling</strong>: Duplicate email/phone detection with appropriate messages</li>
+</ul>
+<h4 id="user-login">3.1.2 User Login</h4>
+<ul>
+<li><strong>Requirement</strong>: Registered users must be able to authenticate</li>
+<li><strong>Input Methods</strong>:
+<ul>
+<li>Email/Username + Password</li>
+<li>Phone Number + Password</li>
+</ul>
+</li>
+<li><strong>API Endpoint</strong>: <code>POST /api/v1/users/login</code></li>
+<li><strong>Response</strong>: Access token, refresh token, user object</li>
+<li><strong>Session Management</strong>: Persistent authentication with token refresh</li>
+<li><strong>Remember Me</strong>: Option to stay logged in (30 days)</li>
+</ul>
+<h4 id="password-recovery">3.1.3 Password Recovery</h4>
+<ul>
+<li><strong>Requirement</strong>: Users must be able to reset forgotten passwords</li>
+<li><strong>Flow</strong>: Email → Security Question → New Password</li>
+<li><strong>API Endpoint</strong>: <code>POST /api/v1/users/forgot-password</code></li>
+<li><strong>Security</strong>: Rate limiting to prevent abuse</li>
+</ul>
+<h3 id="dashboard-priority-high">3.2 Dashboard (Priority: High)</h3>
+<h4 id="balance-display">3.2.1 Balance Display</h4>
+<ul>
+<li><strong>Requirement</strong>: Display user's wallet balance prominently</li>
+<li><strong>Features</strong>:
+<ul>
+<li>Real-time balance updates</li>
+<li>Multiple currency support (USD, EUR, GHS)</li>
+<li>Last updated timestamp</li>
+<li>Refresh functionality</li>
+</ul>
+</li>
+<li><strong>API Endpoint</strong>: <code>GET /api/wallet/balance</code></li>
+<li><strong>Update Frequency</strong>: Every 30 seconds or on pull-to-refresh</li>
+</ul>
+<h4 id="quick-actions">3.2.2 Quick Actions</h4>
+<ul>
+<li><strong>Requirement</strong>: Quick access to main functions</li>
+<li><strong>Actions Available</strong>:
+<ul>
+<li>Send Airtime</li>
+<li>Buy Data</li>
+<li>View Transactions</li>
+<li>More Options</li>
+</ul>
+</li>
+<li><strong>UI</strong>: Grid layout with icons and labels</li>
+</ul>
+<h4 id="recent-transactions">3.2.3 Recent Transactions</h4>
+<ul>
+<li><strong>Requirement</strong>: Display last 5 transactions</li>
+<li><strong>Information Shown</strong>:
+<ul>
+<li>Transaction type (airtime/data)</li>
+<li>Recipient/Network</li>
+<li>Amount</li>
+<li>Status (completed/pending/failed)</li>
+<li>Date/time</li>
+</ul>
+</li>
+<li><strong>Interaction</strong>: Tap to view full details</li>
+</ul>
+<h3 id="airtime-purchase-priority-high">3.3 Airtime Purchase (Priority: High)</h3>
+<h4 id="network-selection">3.3.1 Network Selection</h4>
+<ul>
+<li><strong>Requirement</strong>: Select target mobile network</li>
+<li><strong>Supported Networks</strong>:
+<ul>
+<li>MTN Ghana</li>
+<li>Vodafone Ghana</li>
+<li>AirtelTigo Ghana</li>
+<li>Glo Ghana</li>
+</ul>
+</li>
+<li><strong>UI</strong>: Grid with network logos and names</li>
+</ul>
+<h4 id="recipient-input">3.3.2 Recipient Input</h4>
+<ul>
+<li><strong>Requirement</strong>: Enter recipient phone number</li>
+<li><strong>Features</strong>:
+<ul>
+<li>Phone number validation (Ghana format)</li>
+<li>Contact picker integration</li>
+<li>Recent recipients list</li>
+<li>Save recipient option</li>
+</ul>
+</li>
+</ul>
+<h4 id="amount-selection">3.3.3 Amount Selection</h4>
+<ul>
+<li><strong>Requirement</strong>: Enter or select airtime amount</li>
+<li><strong>Features</strong>:
+<ul>
+<li>Manual amount input</li>
+<li>Preset amounts (GHS 1, 5, 10, 20, 50)</li>
+<li>Real-time currency conversion</li>
+<li>Fee calculation display</li>
+</ul>
+</li>
+<li><strong>Validation</strong>: Minimum GHS 1, Maximum GHS 1000</li>
+</ul>
+<h4 id="payment-processing">3.3.4 Payment Processing</h4>
+<ul>
+<li><strong>Requirement</strong>: Secure payment processing</li>
+<li><strong>Payment Methods</strong>:
+<ul>
+<li>ExpressPay Ghana (primary)</li>
+<li>Mobile Money (future)</li>
+<li>Bank Cards (future)</li>
+</ul>
+</li>
+<li><strong>Flow</strong>:
+<ol>
+<li>Payment method selection</li>
+<li>Payment initiation</li>
+<li>Redirect to payment provider</li>
+<li>Payment verification</li>
+<li>Transaction completion</li>
+</ol>
+</li>
+</ul>
+<h4 id="transaction-confirmation">3.3.5 Transaction Confirmation</h4>
+<ul>
+<li><strong>Requirement</strong>: Provide transaction receipt</li>
+<li><strong>Receipt Details</strong>:
+<ul>
+<li>Transaction ID</li>
+<li>Recipient number</li>
+<li>Amount paid</li>
+<li>Network operator</li>
+<li>Timestamp</li>
+<li>Status</li>
+</ul>
+</li>
+<li><strong>Actions</strong>:
+<ul>
+<li>Share via WhatsApp/SMS/Email</li>
+<li>Save to device</li>
+<li>View in transaction history</li>
+</ul>
+</li>
+</ul>
+<h3 id="data-bundle-purchase-priority-high">3.4 Data Bundle Purchase (Priority: High)</h3>
+<h4 id="bundle-selection">3.4.1 Bundle Selection</h4>
+<ul>
+<li><strong>Requirement</strong>: Select data bundle by network</li>
+<li><strong>Bundle Types</strong>:
+<ul>
+<li>Daily bundles</li>
+<li>Weekly bundles</li>
+<li>Monthly bundles</li>
+<li>Special promotional bundles</li>
+</ul>
+</li>
+<li><strong>Information Display</strong>:
+<ul>
+<li>Data volume (GB/MB)</li>
+<li>Validity period</li>
+<li>Price</li>
+<li>Network operator</li>
+</ul>
+</li>
+</ul>
+<h4 id="purchase-flow">3.4.2 Purchase Flow</h4>
+<ul>
+<li><strong>Requirement</strong>: Similar to airtime purchase flow</li>
+<li><strong>Additional Features</strong>:
+<ul>
+<li>Data balance estimation</li>
+<li>Bundle comparison</li>
+<li>Auto-renewal options (future)</li>
+</ul>
+</li>
+</ul>
+<h3 id="transaction-management-priority-medium">3.5 Transaction Management (Priority: Medium)</h3>
+<h4 id="transaction-history">3.5.1 Transaction History</h4>
+<ul>
+<li><strong>Requirement</strong>: View complete transaction history</li>
+<li><strong>Features</strong>:
+<ul>
+<li>Filter by type (airtime/data)</li>
+<li>Filter by status (completed/pending/failed)</li>
+<li>Date range selection</li>
+<li>Search functionality</li>
+<li>Pagination (20 items per page)</li>
+</ul>
+</li>
+<li><strong>API Endpoint</strong>: <code>GET /api/v1/transactions</code></li>
+</ul>
+<h4 id="transaction-details">3.5.2 Transaction Details</h4>
+<ul>
+<li><strong>Requirement</strong>: View detailed transaction information</li>
+<li><strong>Details Include</strong>:
+<ul>
+<li>Full transaction receipt</li>
+<li>Payment method used</li>
+<li>Processing time</li>
+<li>Error messages (if failed)</li>
+<li>Support contact information</li>
+</ul>
+</li>
+</ul>
+<h3 id="user-profile-priority-medium">3.6 User Profile (Priority: Medium)</h3>
+<h4 id="profile-management">3.6.1 Profile Management</h4>
+<ul>
+<li><strong>Requirement</strong>: View and edit user profile</li>
+<li><strong>Editable Fields</strong>:
+<ul>
+<li>First Name</li>
+<li>Last Name</li>
+<li>Email</li>
+<li>Phone Number</li>
+<li>Profile Picture</li>
+</ul>
+</li>
+<li><strong>Read-only Fields</strong>:
+<ul>
+<li>User ID</li>
+<li>Account Type</li>
+<li>Registration Date</li>
+</ul>
+</li>
+</ul>
+<h4 id="settings">3.6.2 Settings</h4>
+<ul>
+<li><strong>Requirement</strong>: Application preferences</li>
+<li><strong>Settings Categories</strong>:
+<ul>
+<li>Account Settings</li>
+<li>Payment Methods</li>
+<li>Notifications</li>
+<li>Security</li>
+<li>Language (English, Twi, Ewe, Ga, Hausa)</li>
+<li>Theme (Light/Dark/System)</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="non-functional-requirements">4. Non-Functional Requirements</h2>
+<h3 id="performance-requirements">4.1 Performance Requirements</h3>
+<h4 id="response-times">4.1.1 Response Times</h4>
+<ul>
+<li><strong>API Calls</strong>: &lt; 3 seconds for 95% of requests</li>
+<li><strong>App Launch</strong>: &lt; 3 seconds cold start, &lt; 1 second warm start</li>
+<li><strong>Screen Transitions</strong>: &lt; 500ms</li>
+<li><strong>Payment Processing</strong>: &lt; 30 seconds end-to-end</li>
+</ul>
+<h4 id="concurrent-users">4.1.2 Concurrent Users</h4>
+<ul>
+<li><strong>Target</strong>: 10,000 concurrent users</li>
+<li><strong>Peak Load</strong>: 50,000 concurrent users during promotions</li>
+<li><strong>Load Testing</strong>: Must handle 1000 TPS (transactions per second)</li>
+</ul>
+<h3 id="security-requirements">4.2 Security Requirements</h3>
+<h4 id="data-protection">4.2.1 Data Protection</h4>
+<ul>
+<li><strong>Encryption</strong>: AES-256 for sensitive data at rest</li>
+<li><strong>Transmission</strong>: TLS 1.3 for all API communications</li>
+<li><strong>Authentication</strong>: JWT tokens with 15-minute expiry</li>
+<li><strong>Password Security</strong>: bcrypt hashing with salt</li>
+</ul>
+<h4 id="payment-security">4.2.2 Payment Security</h4>
+<ul>
+<li><strong>PCI DSS</strong>: Compliance for payment processing</li>
+<li><strong>Tokenization</strong>: Payment method tokenization</li>
+<li><strong>3D Secure</strong>: Support for 3D Secure authentication</li>
+<li><strong>Fraud Detection</strong>: Basic fraud detection rules</li>
+</ul>
+<h4 id="privacy">4.2.3 Privacy</h4>
+<ul>
+<li><strong>GDPR Compliance</strong>: User data handling per GDPR</li>
+<li><strong>Data Minimization</strong>: Collect only necessary data</li>
+<li><strong>Consent Management</strong>: Explicit consent for data processing</li>
+<li><strong>Right to Deletion</strong>: Account and data deletion capability</li>
+</ul>
+<h3 id="availability-requirements">4.3 Availability Requirements</h3>
+<h4 id="uptime">4.3.1 Uptime</h4>
+<ul>
+<li><strong>Target</strong>: 99.9% uptime (8.76 hours downtime/month)</li>
+<li><strong>Maintenance Window</strong>: 2 hours weekly (Sundays 2-4 AM GMT)</li>
+<li><strong>Disaster Recovery</strong>: 4-hour RTO (Recovery Time Objective)</li>
+</ul>
+<h4 id="error-handling">4.3.2 Error Handling</h4>
+<ul>
+<li><strong>Graceful Degradation</strong>: App remains functional during partial outages</li>
+<li><strong>Offline Mode</strong>: Basic functionality available offline</li>
+<li><strong>Error Messages</strong>: User-friendly error messages with recovery options</li>
+<li><strong>Crash Reporting</strong>: Automatic crash reporting and analytics</li>
+</ul>
+<h3 id="usability-requirements">4.4 Usability Requirements</h3>
+<h4 id="user-experience">4.4.1 User Experience</h4>
+<ul>
+<li><strong>Learning Curve</strong>: New users complete first transaction in &lt; 5 minutes</li>
+<li><strong>Task Success Rate</strong>: &gt; 95% for core tasks</li>
+<li><strong>User Satisfaction</strong>: &gt; 4.5/5 rating in app stores</li>
+<li><strong>Accessibility</strong>: WCAG 2.1 AA compliance</li>
+</ul>
+<h4 id="design-standards">4.4.2 Design Standards</h4>
+<ul>
+<li><strong>Consistency</strong>: Material Design 3 compliance</li>
+<li><strong>Responsive Design</strong>: Optimized for various screen sizes</li>
+<li><strong>Multi-language</strong>: Support for 5 languages</li>
+<li><strong>Theme Support</strong>: Light, dark, and system themes</li>
+</ul>
+<h3 id="compatibility-requirements">4.5 Compatibility Requirements</h3>
+<h4 id="platform-support">4.5.1 Platform Support</h4>
+<ul>
+<li><strong>Android</strong>: 5.0 (API 21) and above</li>
+<li><strong>iOS</strong>: 12.0 and above</li>
+<li><strong>Screen Sizes</strong>: 4&quot; to 7&quot; devices</li>
+<li><strong>Orientations</strong>: Portrait primary, landscape secondary</li>
+</ul>
+<h4 id="network-conditions">4.5.2 Network Conditions</h4>
+<ul>
+<li><strong>Connectivity</strong>: 2G, 3G, 4G, 5G, WiFi</li>
+<li><strong>Offline Support</strong>: Queue transactions when offline</li>
+<li><strong>Data Usage</strong>: &lt; 1MB per typical transaction flow</li>
+</ul>
+<hr />
+<h2 id="user-interface-requirements">5. User Interface Requirements</h2>
+<h3 id="design-system">5.1 Design System</h3>
+<h4 id="color-palette">5.1.1 Color Palette</h4>
+<ul>
+<li><strong>Primary</strong>: #00D47E (Vibrant mint green)</li>
+<li><strong>Primary Dark</strong>: #00B870</li>
+<li><strong>Secondary</strong>: #2563EB (Blue accent)</li>
+<li><strong>Background</strong>: #F8FAFC (Light), #0B1F1A (Dark)</li>
+<li><strong>Text</strong>: #0F172A (Light), #F8FAFC (Dark)</li>
+<li><strong>Success</strong>: #00D47E</li>
+<li><strong>Error</strong>: #EF4444</li>
+<li><strong>Warning</strong>: #FACC15</li>
+</ul>
+<h4 id="typography">5.1.2 Typography</h4>
+<ul>
+<li><strong>Font Family</strong>: Inter (Google Fonts)</li>
+<li><strong>Display Sizes</strong>: 40px, 32px, 28px</li>
+<li><strong>Headline Sizes</strong>: 24px, 20px, 18px</li>
+<li><strong>Body Sizes</strong>: 16px, 14px, 12px</li>
+<li><strong>Label Sizes</strong>: 14px, 12px, 11px</li>
+</ul>
+<h4 id="spacing-system">5.1.3 Spacing System</h4>
+<ul>
+<li><strong>Base Unit</strong>: 8px grid</li>
+<li><strong>Scale</strong>: 4px, 8px, 16px, 24px, 32px, 48px, 64px</li>
+</ul>
+<h4 id="component-standards">5.1.4 Component Standards</h4>
+<ul>
+<li><strong>Border Radius</strong>: 16px (default), 24px (cards), 8px (small elements)</li>
+<li><strong>Elevation</strong>: Flat design with subtle shadows</li>
+<li><strong>Buttons</strong>: 56px minimum height, 16px border radius</li>
+<li><strong>Input Fields</strong>: 16px border radius, filled style</li>
+</ul>
+<h3 id="screen-requirements">5.2 Screen Requirements</h3>
+<h4 id="navigation-structure">5.2.1 Navigation Structure</h4>
+<pre><code>/login - Authentication
+/otp - OTP Verification
+/dashboard - Home Screen
+/airtime - Airtime Purchase
+/data - Data Purchase
+/transactions - Transaction History
+/statistics - Spending Analytics
+/settings - App Settings
+/profile - User Profile
+</code></pre>
+<h4 id="bottom-navigation">5.2.2 Bottom Navigation</h4>
+<ul>
+<li>5 tabs: Home, Airtime, Data, History, More</li>
+<li>Fixed position, always visible</li>
+<li>Icons with labels</li>
+<li>Active state: Primary green color</li>
+</ul>
+<h3 id="ui-placeholders-insert-screenshotsmockups">5.3 UI Placeholders (Insert Screenshots/Mockups)</h3>
+<p>The sections below reserve space for interface screenshots in the PDF. Replace each placeholder with an exported screenshot/mockup when available.</p>
+<div style="border: 2px dashed #94A3B8; border-radius: 12px; height: 340px; display: flex; align-items: center; justify-content: center; margin: 16px 0; background: rgba(148,163,184,0.06);">
+  <strong>UI Placeholder: Login Screen</strong>
+</div>
+<div style="border: 2px dashed #94A3B8; border-radius: 12px; height: 340px; display: flex; align-items: center; justify-content: center; margin: 16px 0; background: rgba(148,163,184,0.06);">
+  <strong>UI Placeholder: Registration Screen</strong>
+</div>
+<div style="border: 2px dashed #94A3B8; border-radius: 12px; height: 260px; display: flex; align-items: center; justify-content: center; margin: 16px 0; background: rgba(148,163,184,0.06);">
+  <strong>UI Placeholder: OTP Verification Screen</strong>
+</div>
+<div style="border: 2px dashed #94A3B8; border-radius: 12px; height: 420px; display: flex; align-items: center; justify-content: center; margin: 16px 0; background: rgba(148,163,184,0.06);">
+  <strong>UI Placeholder: Dashboard (Balance + Quick Actions + Recent Transactions)</strong>
+</div>
+<div style="border: 2px dashed #94A3B8; border-radius: 12px; height: 360px; display: flex; align-items: center; justify-content: center; margin: 16px 0; background: rgba(148,163,184,0.06);">
+  <strong>UI Placeholder: Airtime/Data Menu Screen</strong>
+</div>
+<div style="border: 2px dashed #94A3B8; border-radius: 12px; height: 360px; display: flex; align-items: center; justify-content: center; margin: 16px 0; background: rgba(148,163,184,0.06);">
+  <strong>UI Placeholder: Select Recipient (Contacts + Recent)</strong>
+</div>
+<div style="border: 2px dashed #94A3B8; border-radius: 12px; height: 360px; display: flex; align-items: center; justify-content: center; margin: 16px 0; background: rgba(148,163,184,0.06);">
+  <strong>UI Placeholder: Enter Amount (Presets + Conversion + Fees)</strong>
+</div>
+<div style="border: 2px dashed #94A3B8; border-radius: 12px; height: 380px; display: flex; align-items: center; justify-content: center; margin: 16px 0; background: rgba(148,163,184,0.06);">
+  <strong>UI Placeholder: Confirm Transaction (Summary + Payment Method)</strong>
+</div>
+<div style="border: 2px dashed #94A3B8; border-radius: 12px; height: 420px; display: flex; align-items: center; justify-content: center; margin: 16px 0; background: rgba(148,163,184,0.06);">
+  <strong>UI Placeholder: ExpressPay Payment (WebView/Deep Link Callback)</strong>
+</div>
+<div style="border: 2px dashed #94A3B8; border-radius: 12px; height: 360px; display: flex; align-items: center; justify-content: center; margin: 16px 0; background: rgba(148,163,184,0.06);">
+  <strong>UI Placeholder: Transaction Receipt (Share/Save)</strong>
+</div>
+<div style="border: 2px dashed #94A3B8; border-radius: 12px; height: 420px; display: flex; align-items: center; justify-content: center; margin: 16px 0; background: rgba(148,163,184,0.06);">
+  <strong>UI Placeholder: Transaction History (Filters + List)</strong>
+</div>
+<div style="border: 2px dashed #94A3B8; border-radius: 12px; height: 420px; display: flex; align-items: center; justify-content: center; margin: 16px 0; background: rgba(148,163,184,0.06);">
+  <strong>UI Placeholder: Transaction Detail Screen</strong>
+</div>
+<div style="border: 2px dashed #94A3B8; border-radius: 12px; height: 360px; display: flex; align-items: center; justify-content: center; margin: 16px 0; background: rgba(148,163,184,0.06);">
+  <strong>UI Placeholder: Settings / Profile</strong>
+</div>
+<hr />
+<h2 id="api-requirements">6. API Requirements</h2>
+<h3 id="base-configuration">6.1 Base Configuration</h3>
+<ul>
+<li><strong>Base URL</strong>: <code>https://api.advansistechnologies.com</code></li>
+<li><strong>API Version</strong>: <code>/api/v1</code></li>
+<li><strong>Authentication</strong>: Bearer token (JWT)</li>
+<li><strong>Content Type</strong>: <code>application/json</code></li>
+<li><strong>Timeout</strong>: 15 seconds connection, 30 seconds read</li>
+</ul>
+<h3 id="required-endpoints">6.2 Required Endpoints</h3>
+<h4 id="authentication">6.2.1 Authentication</h4>
+<ul>
+<li><code>POST /api/v1/users/register</code> - User registration</li>
+<li><code>POST /api/v1/users/login</code> - User login</li>
+<li><code>POST /api/v1/auth/refresh</code> - Token refresh</li>
+<li><code>POST /api/v1/users/change-password</code> - Password change</li>
+<li><code>GET /api/v1/users/profile</code> - Get profile</li>
+<li><code>PUT /api/v1/users/profile</code> - Update profile</li>
+</ul>
+<h4 id="wallet">6.2.2 Wallet</h4>
+<ul>
+<li><code>GET /api/v1/wallet/balance</code> - Get wallet balance</li>
+</ul>
+<h4 id="airtime">6.2.3 Airtime</h4>
+<ul>
+<li><code>POST /api/v1/airtime/reloadly</code> - International airtime</li>
+<li><code>POST /api/v1/airtime/prymo</code> - Ghana local airtime</li>
+</ul>
+<h4 id="data">6.2.4 Data</h4>
+<ul>
+<li><code>POST /api/v1/data/reloadly</code> - International data</li>
+<li><code>POST /api/v1/data/prymo</code> - Ghana local data</li>
+</ul>
+<h4 id="payment">6.2.5 Payment</h4>
+<ul>
+<li><code>POST /api/v1/payment/expresspay/initiate</code> - Initiate payment</li>
+<li><code>POST /api/v1/payment/expresspay/verify</code> - Verify payment</li>
+<li><code>GET /api/v1/payment/expresspay/methods</code> - Get payment methods</li>
+</ul>
+<h4 id="transactions">6.2.6 Transactions</h4>
+<ul>
+<li><code>GET /api/v1/transactions</code> - List transactions</li>
+<li><code>GET /api/v1/transactions/{id}</code> - Transaction details</li>
+</ul>
+<h3 id="error-handling-1">6.3 Error Handling</h3>
+<ul>
+<li><strong>Standard HTTP Status Codes</strong>: 200, 201, 400, 401, 403, 404, 500</li>
+<li><strong>Error Response Format</strong>:
+<pre><code class="language-json">{
+  &quot;error&quot;: {
+    &quot;code&quot;: &quot;ERROR_CODE&quot;,
+    &quot;message&quot;: &quot;Human readable message&quot;,
+    &quot;details&quot;: &quot;Additional context&quot;
+  }
+}
+</code></pre>
+</li>
+</ul>
+<hr />
+<h2 id="testing-requirements">7. Testing Requirements</h2>
+<h3 id="testing-strategy">7.1 Testing Strategy</h3>
+<h4 id="unit-testing">7.1.1 Unit Testing</h4>
+<ul>
+<li><strong>Coverage</strong>: Minimum 80% code coverage</li>
+<li><strong>Tools</strong>: Flutter test framework</li>
+<li><strong>Scope</strong>: Business logic, utilities, models</li>
+</ul>
+<h4 id="integration-testing">7.1.2 Integration Testing</h4>
+<ul>
+<li><strong>API Integration</strong>: Test all API endpoints</li>
+<li><strong>Payment Flow</strong>: End-to-end payment testing</li>
+<li><strong>Authentication Flow</strong>: Complete auth journey testing</li>
+</ul>
+<h4 id="ui-testing">7.1.3 UI Testing</h4>
+<ul>
+<li><strong>Widget Tests</strong>: Critical UI components</li>
+<li><strong>Golden Tests</strong>: Visual regression testing</li>
+<li><strong>Accessibility Tests</strong>: Screen reader compatibility</li>
+</ul>
+<h4 id="performance-testing">7.1.4 Performance Testing</h4>
+<ul>
+<li><strong>Load Testing</strong>: 1000+ concurrent users</li>
+<li><strong>Stress Testing</strong>: Peak load scenarios</li>
+<li><strong>Memory Testing</strong>: Memory leak detection</li>
+</ul>
+<h3 id="test-environments">7.2 Test Environments</h3>
+<ul>
+<li><strong>Development</strong>: Local development environment</li>
+<li><strong>Staging</strong>: Production-like environment</li>
+<li><strong>Production</strong>: Live environment with monitoring</li>
+</ul>
+<hr />
+<h2 id="deployment-requirements">8. Deployment Requirements</h2>
+<h3 id="app-store-requirements">8.1 App Store Requirements</h3>
+<h4 id="google-play-store">8.1.1 Google Play Store</h4>
+<ul>
+<li><strong>Target SDK</strong>: 34 (Android 14)</li>
+<li><strong>Content Rating</strong>: Everyone</li>
+<li><strong>Category</strong>: Finance</li>
+<li><strong>Privacy Policy</strong>: Required and accessible</li>
+<li><strong>Target Audience</strong>: Ghana (primary), International (secondary)</li>
+</ul>
+<h4 id="apple-app-store">8.1.2 Apple App Store</h4>
+<ul>
+<li><strong>iOS Target</strong>: 17.0</li>
+<li><strong>App Category</strong>: Finance</li>
+<li><strong>Age Rating</strong>: 4+</li>
+<li><strong>App Privacy</strong>: Complete privacy nutrition label</li>
+</ul>
+<h3 id="build-requirements">8.2 Build Requirements</h3>
+<h4 id="android">8.2.1 Android</h4>
+<ul>
+<li><strong>Build Type</strong>: APK for testing, AAB for production</li>
+<li><strong>Signing</strong>: Release signing with proper keystore</li>
+<li><strong>ProGuard</strong>: Code obfuscation enabled</li>
+<li><strong>Size</strong>: &lt; 50MB APK size</li>
+</ul>
+<h4 id="ios">8.2.2 iOS</h4>
+<ul>
+<li><strong>Build Type</strong>: IPA for distribution</li>
+<li><strong>Code Signing</strong>: Proper certificates and provisioning</li>
+<li><strong>App Thinning</strong>: Enabled for device-specific optimization</li>
+<li><strong>Size</strong>: &lt; 100MB IPA size</li>
+</ul>
+<hr />
+<h2 id="security-considerations">9. Security Considerations</h2>
+<h3 id="data-protection-1">9.1 Data Protection</h3>
+<ul>
+<li><strong>Local Storage</strong>: Sensitive data encrypted</li>
+<li><strong>API Keys</strong>: Stored securely, not hardcoded</li>
+<li><strong>User Data</strong>: Minimal data collection</li>
+<li><strong>Logs</strong>: No sensitive information in logs</li>
+</ul>
+<h3 id="network-security">9.2 Network Security</h3>
+<ul>
+<li><strong>Certificate Pinning</strong>: Prevent MITM attacks</li>
+<li><strong>Request Signing</strong>: Critical requests signed</li>
+<li><strong>Rate Limiting</strong>: API abuse prevention</li>
+<li><strong>Input Validation</strong>: All inputs validated</li>
+</ul>
+<h3 id="application-security">9.3 Application Security</h3>
+<ul>
+<li><strong>Root/Jailbreak Detection</strong>: Basic detection</li>
+<li><strong>Screen Recording</strong>: Prevent sensitive screens</li>
+<li><strong>Screenshot Prevention</strong>: Payment screens</li>
+<li><strong>App Backup</strong>: Disabled for sensitive data</li>
+</ul>
+<hr />
+<h2 id="assumptions-and-constraints">10. Assumptions and Constraints</h2>
+<h3 id="assumptions">10.1 Assumptions</h3>
+<ul>
+<li>Users have stable internet connection for transactions</li>
+<li>Ghanaian mobile networks support API integration</li>
+<li>Payment gateway (ExpressPay) remains operational</li>
+<li>Users understand basic mobile app usage</li>
+<li>Device hardware meets minimum requirements</li>
+</ul>
+<h3 id="constraints">10.2 Constraints</h3>
+<ul>
+<li>MVP limited to Ghana market only</li>
+<li>Single payment gateway (ExpressPay) initially</li>
+<li>No offline transaction processing</li>
+<li>Limited to airtime and data services (no bill payments)</li>
+<li>No peer-to-peer transfers in MVP</li>
+</ul>
+<h3 id="dependencies">10.3 Dependencies</h3>
+<ul>
+<li>External API availability (Reloadly, Prymo, ExpressPay)</li>
+<li>Flutter framework stability and updates</li>
+<li>App store approval processes</li>
+<li>Network operator cooperation</li>
+<li>Payment gateway reliability</li>
+</ul>
+<hr />
+<h2 id="success-criteria">11. Success Criteria</h2>
+<h3 id="technical-metrics">11.1 Technical Metrics</h3>
+<ul>
+<li><strong>App Launch Time</strong>: &lt; 3 seconds</li>
+<li><strong>API Response Time</strong>: &lt; 3 seconds (95th percentile)</li>
+<li><strong>Crash Rate</strong>: &lt; 0.5%</li>
+<li><strong>API Success Rate</strong>: &gt; 99.5%</li>
+<li><strong>Test Coverage</strong>: &gt; 80%</li>
+</ul>
+<h3 id="business-metrics">11.2 Business Metrics</h3>
+<ul>
+<li><strong>User Registration</strong>: 1000+ users in first month</li>
+<li><strong>Transaction Success</strong>: &gt; 95% completion rate</li>
+<li><strong>User Retention</strong>: 60% monthly retention</li>
+<li><strong>App Store Rating</strong>: &gt; 4.0 stars</li>
+<li><strong>Support Tickets</strong>: &lt; 5% of transactions</li>
+</ul>
+<h3 id="user-experience-metrics">11.3 User Experience Metrics</h3>
+<ul>
+<li><strong>First Transaction</strong>: &lt; 5 minutes from install</li>
+<li><strong>Task Success Rate</strong>: &gt; 95% for core flows</li>
+<li><strong>User Satisfaction</strong>: &gt; 4.2/5 rating</li>
+<li><strong>Support Response</strong>: &lt; 2 hours average</li>
+<li><strong>Feature Adoption</strong>: &gt; 70% for core features</li>
+</ul>
+<hr />
+<h2 id="risk-assessment">12. Risk Assessment</h2>
+<h3 id="technical-risks">12.1 Technical Risks</h3>
+<ul>
+<li><strong>API Downtime</strong>: Mitigate with retry logic and error handling</li>
+<li><strong>Payment Failures</strong>: Implement robust error recovery</li>
+<li><strong>Performance Issues</strong>: Optimize code and use caching</li>
+<li><strong>Security Breaches</strong>: Regular security audits and updates</li>
+</ul>
+<h3 id="business-risks">12.2 Business Risks</h3>
+<ul>
+<li><strong>Regulatory Changes</strong>: Monitor regulatory environment</li>
+<li><strong>Competition</strong>: Differentiate with better UX and features</li>
+<li><strong>Market Adoption</strong>: Aggressive marketing and user education</li>
+<li><strong>Payment Gateway Issues</strong>: Backup payment provider options</li>
+</ul>
+<h3 id="operational-risks">12.3 Operational Risks</h3>
+<ul>
+<li><strong>Scaling Issues</strong>: Design for scalability from start</li>
+<li><strong>User Support</strong>: Implement comprehensive support system</li>
+<li><strong>Data Loss</strong>: Regular backups and disaster recovery</li>
+<li><strong>App Store Rejection</strong>: Follow guidelines strictly</li>
+</ul>
+<hr />
+<h2 id="future-enhancements-post-mvp">13. Future Enhancements (Post-MVP)</h2>
+<h3 id="feature-roadmap">13.1 Feature Roadmap</h3>
+<ul>
+<li><strong>Bill Payments</strong>: Utilities, TV, internet bills</li>
+<li><strong>Peer-to-Peer Transfers</strong>: User-to-user money transfers</li>
+<li><strong>Virtual Cards</strong>: Physical and virtual debit cards</li>
+<li><strong>Investment Services</strong>: Savings and investment products</li>
+<li><strong>Business Services</strong>: Merchant services and bulk purchases</li>
+</ul>
+<h3 id="technical-enhancements">13.2 Technical Enhancements</h3>
+<ul>
+<li><strong>Push Notifications</strong>: Transaction alerts and promotions</li>
+<li><strong>Biometric Authentication</strong>: Fingerprint and face recognition</li>
+<li><strong>Voice Commands</strong>: Voice-activated transactions</li>
+<li><strong>AI Assistant</strong>: Smart recommendations and support</li>
+<li><strong>Blockchain Integration</strong>: Enhanced security and transparency</li>
+</ul>
+<hr />
+<h2 id="approval-sign-off">14. Approval Sign-off</h2>
+<table>
+<thead>
+<tr>
+<th><strong>Role</strong></th>
+<th><strong>Name</strong></th>
+<th><strong>Signature</strong></th>
+<th><strong>Date</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Product Owner</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Technical Lead</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>QA Lead</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Business Stakeholder</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="document-history">Document History</h2>
+<table>
+<thead>
+<tr>
+<th><strong>Version</strong></th>
+<th><strong>Date</strong></th>
+<th><strong>Author</strong></th>
+<th><strong>Changes</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.0</td>
+<td>January 8, 2026</td>
+<td>Development Team</td>
+<td>Initial MVP SRS</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><strong>This document serves as the authoritative source of requirements for the LidaPay Mobile Application MVP. All development, testing, and deployment activities should reference this document to ensure alignment with project objectives and quality standards.</strong></p>
+
+</body>
+</html>

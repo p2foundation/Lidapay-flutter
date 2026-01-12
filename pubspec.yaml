@@ -1,0 +1,101 @@
+name: lidapay
+description: LidaPay - International and local airtime and internet data remittance app for Ghana
+publish_to: 'none'
+version: 1.0.1+2
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # State Management
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+  
+  # Navigation
+  go_router: ^13.0.0
+  
+  # Networking
+  dio: ^5.4.0
+  retrofit: 4.1.0
+  
+  # Models & Serialization
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.8.1
+  
+  # Local Storage
+  shared_preferences: ^2.2.2
+  hydrated_bloc: ^9.1.2
+  
+  # Forms & Validation
+  flutter_form_builder: 10.2.0
+  
+  # UI Components
+  flutter_svg: ^2.0.9
+  cached_network_image: ^3.3.0
+  shimmer: ^3.0.0
+  flutter_animate: ^4.3.0
+  google_fonts: ^6.1.0
+  
+  # Charts
+  fl_chart: ^0.65.0
+  
+  # Utilities
+  equatable: ^2.0.5
+  uuid: ^4.2.1
+  url_launcher: ^6.2.2
+  share_plus: ^7.2.1
+  intl: ^0.20.2
+  flutter_gravatar: ^2.0.0
+  
+  # App Icons
+  flutter_launcher_icons: ^0.13.1
+  
+  # Deep Linking
+  app_links: ^6.0.1
+  
+  # Icons
+  cupertino_icons: ^1.0.6
+  
+  # Localization
+  flutter_localizations:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  
+  # Code Generation
+  build_runner: ^2.4.7
+  freezed: ^2.4.6
+  json_serializable: ^6.7.1
+  retrofit_generator: 8.0.6
+  riverpod_generator: ^2.3.9
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/icons/
+    - lib/core/localization/lang/
+
+# Flutter Launcher Icons Configuration
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: false
+  image_path: "assets/icons/lidapay_logo.png"
+  min_sdk_android: 21 # android min sdk min:16, default 21
+  # Use adaptive icon with proper sizing
+  adaptive_icon_background: "#ffffff"
+  adaptive_icon_foreground: "assets/icons/lidapay_logo.png"
+  # Ensure icon is properly sized and centered
+  icon_size: 48 # mdpi size (48dp)
+  # Reduce padding for better fit
+  adaptive_icon_padding: 0
+  # Remove extra padding
+  remove_alpha_ios: true
+
