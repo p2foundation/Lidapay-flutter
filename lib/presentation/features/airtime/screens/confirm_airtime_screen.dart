@@ -616,6 +616,39 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
     );
   }
 
+  Widget _buildDetailItemWithFlag(String label, String value, Country country) {
+    return Row(
+      children: [
+        CountryFlagWidget(
+          flagUrl: country.flag,
+          countryCode: country.code,
+          size: 40,
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.lightTextSecondary,
+                    ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildDetailItemWithLogo(String label, String value, AutodetectData operatorData, Country country) {
     return Row(
       children: [
