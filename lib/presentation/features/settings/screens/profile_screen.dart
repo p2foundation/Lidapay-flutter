@@ -17,6 +17,7 @@ class ProfileScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
+        primary: false,
         elevation: 0,
         backgroundColor: Colors.transparent,
         leading: IconButton(

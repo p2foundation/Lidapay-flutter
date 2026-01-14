@@ -102,6 +102,7 @@ class AppLocalizations {
   String get lightMode => translate('light_mode');
   String get system => translate('system');
   String get appearance => translate('appearance');
+  String get currency => translate('currency');
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -122,7 +123,7 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
   }
 
   @override
-  bool shouldReload(LocalizationsDelegate<AppLocalizations> old) => false;
+  bool shouldReload(LocalizationsDelegate<AppLocalizations> old) => true;
 }
 
 class LanguageData {

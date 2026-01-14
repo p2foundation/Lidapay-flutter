@@ -8,6 +8,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/wallet_provider.dart';
+import '../../../providers/locale_provider.dart';
+import '../../../providers/currency_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -18,6 +20,8 @@ class SettingsScreen extends ConsumerWidget {
     final balanceAsync = ref.watch(balanceProvider);
     final prefs = ref.read(sharedPreferencesProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final currentLocale = ref.watch(localeProvider);
+    final currentCurrency = ref.watch(currencyProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -56,7 +60,7 @@ class SettingsScreen extends ConsumerWidget {
         child: Column(
           children: [
             // Hero Header with Gradient
-            _buildHeader(context, userAsync, balanceAsync),
+            _buildHeader(context, userAsync, balanceAsync, ref.read(currencyProvider.notifier).getCurrencySymbol(currentCurrency)),
             // Main Content
             Expanded(
               child: Container(
@@ -216,8 +220,8 @@ class SettingsScreen extends ConsumerWidget {
                             ),
                             _SettingsItem(
                               icon: Icons.language_rounded,
-                              title: 'Language',
-                              subtitle: 'English',
+                              title: 'Language & Currency',
+                              subtitle: '${_getLanguageName(currentLocale.languageCode)} • $currentCurrency',
                               gradient: AppColors.brandGradient,
                               onTap: () => context.push('/language'),
                             ),
@@ -288,7 +292,32 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, AsyncValue userAsync, AsyncValue balanceAsync) {
+  String _getLanguageName(String languageCode) {
+    switch (languageCode) {
+      case 'en':
+        return 'English';
+      case 'es':
+        return 'Español';
+      case 'fr':
+        return 'Français';
+      case 'de':
+        return 'Deutsch';
+      case 'it':
+        return 'Italiano';
+      case 'pt':
+        return 'Português';
+      case 'zh':
+        return '中文';
+      case 'ja':
+        return '日本語';
+      case 'ar':
+        return 'العربية';
+      default:
+        return 'English';
+    }
+  }
+
+  Widget _buildHeader(BuildContext context, AsyncValue userAsync, AsyncValue balanceAsync, String currencySymbol) {
     return Container(
       decoration: const BoxDecoration(
         gradient: AppColors.heroGradient, // Pink to Indigo
@@ -319,7 +348,11 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.lg),
             // Profile Card
             userAsync.when(
-              data: (user) => _ProfileHeaderCard(user: user, balanceAsync: balanceAsync),
+              data: (user) => _ProfileHeaderCard(
+                user: user, 
+                balanceAsync: balanceAsync,
+                currencySymbol: currencySymbol,
+              ),
               loading: () => const _ProfileHeaderCardShimmer(),
               error: (_, __) => const _ProfileHeaderCardError(),
             ),
@@ -336,10 +369,12 @@ class SettingsScreen extends ConsumerWidget {
 class _ProfileHeaderCard extends StatelessWidget {
   final dynamic user;
   final AsyncValue balanceAsync;
+  final String currencySymbol;
 
   const _ProfileHeaderCard({
     required this.user,
     required this.balanceAsync,
+    required this.currencySymbol,
   });
 
   @override
@@ -438,7 +473,7 @@ class _ProfileHeaderCard extends StatelessWidget {
                         ),
                   ),
                   Text(
-                    'GHS ${balance.balance.toStringAsFixed(2)}',
+                    '$currencySymbol${balance.balance.toStringAsFixed(2)}',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,

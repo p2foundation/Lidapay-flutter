@@ -29,5 +29,6 @@
   "dark_mode": "Dark Mode",
   "light_mode": "Light Mode",
   "system": "System",
-  "appearance": "Appearance"
+  "appearance": "Appearance",
+  "currency": "Currency"
 }

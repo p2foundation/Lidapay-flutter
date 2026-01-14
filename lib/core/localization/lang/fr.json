@@ -29,5 +29,6 @@
   "dark_mode": "Mode Sombre",
   "light_mode": "Mode Clair",
   "system": "Système",
-  "appearance": "Apparence"
+  "appearance": "Apparence",
+  "currency": "Devise"
 }

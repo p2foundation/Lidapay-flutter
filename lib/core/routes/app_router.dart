@@ -15,6 +15,7 @@ import '../../presentation/features/airtime/screens/select_country_screen.dart';
 import '../../presentation/features/airtime/screens/enter_phone_screen.dart';
 import '../../presentation/features/airtime/screens/select_amount_screen.dart';
 import '../../presentation/features/airtime/screens/confirm_airtime_screen.dart';
+import '../../presentation/features/airtime/screens/airtime_converter_screen.dart';
 import '../../presentation/features/data/screens/select_country_data_screen.dart';
 import '../../presentation/features/data/screens/enter_phone_data_screen.dart';
 import '../../presentation/features/data/screens/select_bundle_screen.dart';
@@ -155,6 +156,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/airtime/confirm-airtime',
         name: 'confirm-airtime',
         builder: (context, state) => const ConfirmAirtimeScreen(),
+      ),
+      GoRoute(
+        path: '/airtime/converter',
+        name: 'airtime-converter',
+        builder: (context, state) => const AirtimeConverterScreen(),
       ),
       // Data Bundle Wizard Routes
       GoRoute(

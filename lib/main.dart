@@ -11,6 +11,7 @@ import 'core/localization/app_localizations.dart';
 import 'core/utils/logger.dart';
 import 'core/constants/app_constants.dart';
 import 'presentation/providers/auth_provider.dart';
+import 'presentation/providers/locale_provider.dart';
 
 // Global navigator key for deep linking
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -165,13 +166,22 @@ class _LidapayAppState extends ConsumerState<LidapayApp> {
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final locale = ref.watch(localeProvider);
 
     return MaterialApp.router(
       title: 'Lidapay',
       debugShowCheckedModeBanner: false,
+      builder: (context, child) {
+        return MediaQuery.removePadding(
+          context: context,
+          removeTop: true,
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
+      locale: locale,
       routerConfig: router,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: [
@@ -180,7 +190,6 @@ class _LidapayAppState extends ConsumerState<LidapayApp> {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      locale: const Locale('en', 'US'), // Default to English
     );
   }
 }

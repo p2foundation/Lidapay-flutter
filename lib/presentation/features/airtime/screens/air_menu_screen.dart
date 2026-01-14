@@ -123,7 +123,7 @@ class _AirMenuScreenState extends State<AirMenuScreen>
         gradient: const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
         category: 'Convert',
         isNew: true,
-        onTap: () => _showComingSoon(context, 'Airtime to Cash'),
+        onTap: () => context.push('/airtime/converter'),
       ),
       _ServiceItem(
         icon: Icons.send_rounded,
@@ -633,7 +633,7 @@ class _AirMenuScreenState extends State<AirMenuScreen>
                   ),
                   isCompact: true,
                   isNew: true,
-                  onTap: () => _showComingSoon(context, 'Airtime Convert'),
+                  onTap: () => context.push('/airtime/converter'),
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 ServiceCard(

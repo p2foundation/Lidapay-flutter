@@ -346,7 +346,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
                 isCompact: true,
                 isNew: true,
-                onTap: () => context.push('/airtime'),
+                onTap: () => context.push('/airtime/converter'),
               ),
               const SizedBox(width: AppSpacing.sm),
               ServiceCard(

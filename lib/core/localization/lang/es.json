@@ -29,5 +29,6 @@
   "dark_mode": "Modo Oscuro",
   "light_mode": "Modo Claro",
   "system": "Sistema",
-  "appearance": "Apariencia"
+  "appearance": "Apariencia",
+  "currency": "Moneda"
 }
