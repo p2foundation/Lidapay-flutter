@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/custom_bottom_nav.dart';
 import '../../../../core/widgets/service_card.dart';
 import '../../../../core/widgets/glassmorphic_card.dart';
+import '../../../../data/models/api_models.dart';
 import '../../../providers/wallet_provider.dart';
 import '../../../providers/transaction_provider.dart';
 
@@ -36,6 +38,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final transactionsState = ref.watch(transactionsNotifierProvider);
+    final balanceAsync = ref.watch(balanceProvider);
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
@@ -60,7 +63,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             child: Column(
               children: [
                 // Header with Purple Gradient
-                _buildHeader(context, ref),
+                _buildHeader(context, ref, balanceAsync),
                 // Main Content
                 Container(
                   color: colorScheme.surface,
@@ -98,7 +101,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, WidgetRef ref) {
+  Widget _buildHeader(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<BalanceData> balanceAsync,
+  ) {
     return Container(
       decoration: const BoxDecoration(
         gradient: AppColors.heroGradient, // Pink to Indigo (Brand Colors)
@@ -160,6 +167,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: AppSpacing.md),
+            _buildBalanceCard(context, balanceAsync),
             const SizedBox(height: AppSpacing.lg),
             // Status Metrics
             _buildStatusMetrics(context, ref),
@@ -171,6 +180,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Widget _buildStatusMetrics(BuildContext context, WidgetRef ref) {
     final transactionsState = ref.watch(transactionsNotifierProvider);
+    final formatter = NumberFormat.compactCurrency(symbol: 'GHS ', decimalDigits: 0);
     
     // Calculate statistics from transactions
     final transactions = transactionsState.transactions;
@@ -233,33 +243,51 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           _StatusMetricItem(
             icon: Icons.phone_android_rounded,
             label: 'Airtime',
-            value: 'GHS ${totalAirtime.toStringAsFixed(0)}',
+            value: formatter.format(totalAirtime),
             color: Colors.white,
           ),
           const SizedBox(width: AppSpacing.sm),
           _StatusMetricItem(
             icon: Icons.wifi_rounded,
             label: 'Data',
-            value: 'GHS ${totalData.toStringAsFixed(0)}',
+            value: formatter.format(totalData),
             color: Colors.white,
           ),
           const SizedBox(width: AppSpacing.sm),
           _StatusMetricItem(
             icon: Icons.trending_up_rounded,
             label: 'Sent',
-            value: 'GHS ${totalSent.toStringAsFixed(0)}',
+            value: formatter.format(totalSent),
             color: Colors.white,
           ),
           const SizedBox(width: AppSpacing.sm),
           _StatusMetricItem(
             icon: Icons.trending_down_rounded,
             label: 'Received',
-            value: 'GHS ${totalReceived.toStringAsFixed(0)}',
+            value: formatter.format(totalReceived),
             color: Colors.white,
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildBalanceCard(BuildContext context, AsyncValue<BalanceData> balanceAsync) {
+    return GlassmorphicCard(
+      blur: 12,
+      opacity: 0.12,
+      borderRadius: BorderRadius.circular(AppRadius.xl),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      onTap: () => context.push('/wallet'),
+      child: balanceAsync.when(
+        data: (balance) => _BalanceCardContent(balance: balance),
+        loading: () => const _BalanceCardLoading(),
+        error: (_, __) => const _BalanceCardContent(
+          balance: BalanceData(balance: 0.0, currency: 'GHS'),
+          isError: true,
+        ),
+      ),
+    ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.08, end: 0);
   }
 
   Widget _buildQuickServices(BuildContext context) {
@@ -378,8 +406,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget _buildTransactionSummary(BuildContext context, TransactionsState transactionsState, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final transactions = transactionsState.transactions;
-    final pendingCount = transactions.where((t) => t.status.toLowerCase() == 'pending').length;
-    final completedCount = transactions.where((t) => t.status.toLowerCase() == 'completed').length;
+    var pendingCount = 0;
+    var completedCount = 0;
+
+    for (final transaction in transactions) {
+      final status = transaction.status.toLowerCase();
+      if (status == 'pending' || status == 'processing') {
+        pendingCount++;
+      }
+      if (status == 'completed' || status == 'successful' || status == 'success') {
+        completedCount++;
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -410,7 +448,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             Expanded(
               child: _TransactionSummaryCard(
                 icon: Icons.access_time_rounded,
-                title: 'Pending Transactions',
+                title: 'Pending',
                 count: pendingCount,
                 gradient: const LinearGradient(
                   colors: [Color(0xFF14B8A6), Color(0xFF0D9488)],
@@ -422,7 +460,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             Expanded(
               child: _TransactionSummaryCard(
                 icon: Icons.check_circle_rounded,
-                title: 'Completed Transactions',
+                title: 'Completed',
                 count: completedCount,
                 gradient: const LinearGradient(
                   colors: [Color(0xFF10B981), Color(0xFF059669)],
@@ -471,7 +509,52 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
     
     if (transactions.isEmpty) {
-      return const SizedBox.shrink();
+      return Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkCard : Colors.white,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(
+            color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: AppColors.brandPrimary.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.receipt_long_rounded, color: AppColors.brandPrimary),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'No recent transactions',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Your latest activity will show up here once you start transacting.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isDark
+                              ? AppColors.darkTextSecondary
+                              : AppColors.lightTextSecondary,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
     }
     
     return Column(
@@ -503,6 +586,115 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           onTap: () => context.push('/transactions/${t.id}', extra: t),
           child: _TransactionItem(transaction: t),
         )),
+      ],
+    );
+  }
+}
+
+// ============================================================================
+// BALANCE CARD CONTENT
+// ============================================================================
+class _BalanceCardContent extends StatelessWidget {
+  final BalanceData balance;
+  final bool isError;
+
+  const _BalanceCardContent({
+    required this.balance,
+    this.isError = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final formatter = NumberFormat.currency(
+      symbol: '${balance.currency} ',
+      decimalDigits: 2,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Available Balance',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: Colors.white.withOpacity(0.8),
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.18),
+                borderRadius: BorderRadius.circular(AppRadius.full),
+              ),
+              child: Text(
+                'Wallet',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          isError ? '--' : formatter.format(balance.balance),
+          style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          isError
+              ? 'Balance unavailable. Tap to retry.'
+              : 'Tap to view wallet details and funding options.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.white.withOpacity(0.85),
+              ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BalanceCardLoading extends StatelessWidget {
+  const _BalanceCardLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 140,
+          height: 14,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.25),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Container(
+          width: 200,
+          height: 28,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.25),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Container(
+          width: 220,
+          height: 12,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+          ),
+        ),
       ],
     );
   }
@@ -581,6 +773,7 @@ class _TransactionSummaryCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final int count;
+  final String? subtitle;
   final LinearGradient gradient;
   final VoidCallback onTap;
 
@@ -588,6 +781,7 @@ class _TransactionSummaryCard extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.count,
+    this.subtitle,
     required this.gradient,
     required this.onTap,
   });
@@ -625,6 +819,16 @@ class _TransactionSummaryCard extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                   ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle!,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: Colors.white.withOpacity(0.9),
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ],
                 ],
               ),
             ),

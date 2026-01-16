@@ -125,14 +125,16 @@ class _EnterPhoneDataScreenState extends ConsumerState<EnterPhoneDataScreen> {
         await _loadOperators(country.code);
       } else {
         setState(() {
-          _error = autodetectResponse.message;
+          _error = autodetectResponse.message.isNotEmpty
+              ? autodetectResponse.message
+              : 'We could not detect the network for this number. Check the digits and try again.';
           _isDetecting = false;
         });
       }
     } catch (e) {
       if (!mounted || requestId != _detectSeq) return;
       setState(() {
-        _error = 'Failed to detect operator. Please check the phone number.';
+        _error = 'We could not detect the network for this number. Please verify the phone number and try again.';
         _isDetecting = false;
       });
     }

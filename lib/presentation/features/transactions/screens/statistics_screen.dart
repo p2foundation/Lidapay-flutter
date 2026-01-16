@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../data/models/api_models.dart';
 import '../../../providers/statistics_provider.dart';
+import '../../../providers/transaction_provider.dart';
 
 class StatisticsScreen extends ConsumerStatefulWidget {
   const StatisticsScreen({super.key});
@@ -16,11 +19,28 @@ class StatisticsScreen extends ConsumerStatefulWidget {
 class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   String _selectedPeriod = 'expenses';
   String _selectedMonth = 'Month';
+  bool _hasLoadedTransactions = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_hasLoadedTransactions) return;
+      _hasLoadedTransactions = true;
+      final state = ref.read(transactionsNotifierProvider);
+      if (state.transactions.isEmpty && !state.isLoading) {
+        ref.read(transactionsNotifierProvider.notifier).loadTransactions();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final statisticsAsync = ref.watch(statisticsProvider);
+    final transactionsState = ref.watch(transactionsNotifierProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final recentTransactions =
+        transactionsState.transactions.take(4).toList(growable: false);
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBackground : Colors.white,
@@ -111,19 +131,31 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             ),
             const SizedBox(height: AppSpacing.xl),
 
-            // Chart Section
+            // Overview + Chart
             statisticsAsync.when(
-              data: (data) => _ChartSection(
-                data: data,
-                selectedPeriod: _selectedPeriod,
+              data: (data) => Column(
+                children: [
+                  _OverviewCards(data: data),
+                  const SizedBox(height: AppSpacing.lg),
+                  _ChartSection(
+                    data: data,
+                    selectedPeriod: _selectedPeriod,
+                  ),
+                ],
               ),
-              loading: () => Container(
-                height: 300,
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkCard : AppColors.lightCard,
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                ),
-                child: const Center(child: CircularProgressIndicator()),
+              loading: () => Column(
+                children: [
+                  const _OverviewSkeleton(),
+                  const SizedBox(height: AppSpacing.lg),
+                  Container(
+                    height: 260,
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkCard : AppColors.lightCard,
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                    ),
+                    child: const Center(child: CircularProgressIndicator()),
+                  ),
+                ],
               ),
               error: (error, _) => Container(
                 padding: const EdgeInsets.all(AppSpacing.xl),
@@ -149,7 +181,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Expenses History',
+                  'Recent Activity',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -167,30 +199,14 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               ],
             ),
             const SizedBox(height: AppSpacing.md),
-            // History Items
-            _HistoryItem(
-              icon: Icons.apple_rounded,
-              title: 'App Store',
-              date: '27 Dec, 2024',
-              amount: -166,
-              method: 'Mastercard',
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            _HistoryItem(
-              icon: Icons.design_services_rounded,
-              title: 'Figma',
-              date: '27 Dec, 2024',
-              amount: -144,
-              method: 'Visa Card',
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            _HistoryItem(
-              icon: Icons.palette_rounded,
-              title: 'Behance',
-              date: '26 Dec, 2024',
-              amount: -124,
-              method: 'Apple Pay',
-            ),
+            if (transactionsState.isLoading && recentTransactions.isEmpty)
+              const _HistoryLoadingState()
+            else if (recentTransactions.isEmpty)
+              const _EmptyHistoryState()
+            else
+              ...recentTransactions
+                  .map((transaction) => _HistoryItem(transaction: transaction))
+                  .toList(),
           ],
         ),
       ),
@@ -241,7 +257,7 @@ class _ToggleButton extends StatelessWidget {
 }
 
 class _ChartSection extends StatelessWidget {
-  final dynamic data;
+  final StatisticsData data;
   final String selectedPeriod;
 
   const _ChartSection({
@@ -267,11 +283,12 @@ class _ChartSection extends StatelessWidget {
       );
     }
 
-    // Find the highlighted month (e.g., Dec)
-    final highlightedIndex = monthlyStats.length > 4 ? 4 : monthlyStats.length - 1;
+    // Highlight latest available month
+    final highlightedIndex = monthlyStats.length - 1;
     final highlightedValue = selectedPeriod == 'expenses'
         ? monthlyStats[highlightedIndex].expenses
         : monthlyStats[highlightedIndex].income;
+    final monthLabels = monthlyStats.map((stat) => stat.month).toList();
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -297,13 +314,14 @@ class _ChartSection extends StatelessWidget {
                     sideTitles: SideTitles(
                       showTitles: true,
                       getTitlesWidget: (value, meta) {
-                        final months = ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
                         final index = value.toInt();
-                        if (index >= 0 && index < months.length) {
+                        if (index >= 0 && index < monthLabels.length) {
+                          final label = monthLabels[index];
+                          final shortLabel = label.length > 3 ? label.substring(0, 3) : label;
                           return Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: Text(
-                              months[index],
+                              shortLabel,
                               style: Theme.of(context).textTheme.labelSmall,
                             ),
                           );
@@ -386,26 +404,23 @@ class _ChartSection extends StatelessWidget {
 }
 
 class _HistoryItem extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String date;
-  final double amount;
-  final String method;
+  final Transaction transaction;
 
   const _HistoryItem({
-    required this.icon,
-    required this.title,
-    required this.date,
-    required this.amount,
-    required this.method,
+    required this.transaction,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final amountColor = amount < 0
+    final isExpense = transaction.amount < 0;
+    final status = transaction.status.toLowerCase();
+    final amountColor = isExpense
         ? AppColors.lightError
         : (isDark ? AppColors.darkSuccess : AppColors.lightSuccess);
+    final title = _buildTitle();
+    final subtitle = _buildSubtitle();
+    final statusColor = _statusColor(status, isDark);
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -423,7 +438,7 @@ class _HistoryItem extends StatelessWidget {
               color: AppColors.brandPrimary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(AppRadius.md),
             ),
-            child: Icon(icon, color: AppColors.brandPrimary, size: 24),
+            child: Icon(_iconForTransaction(), color: AppColors.brandPrimary, size: 24),
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
@@ -438,21 +453,318 @@ class _HistoryItem extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  '$date • $method',
+                  subtitle,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
           ),
-          Text(
-            '\$${amount.abs().toStringAsFixed(2)}',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: amountColor,
-                  fontWeight: FontWeight.w700,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${isExpense ? '-' : '+'}${transaction.currency} ${transaction.amount.abs().toStringAsFixed(2)}',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: amountColor,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(AppRadius.full),
                 ),
+                child: Text(
+                  status.toUpperCase(),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: statusColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     ).animate().fadeIn(duration: 300.ms).slideX(begin: 0.1, end: 0);
+  }
+
+  String _buildTitle() {
+    final name = transaction.recipientName?.trim();
+    final phone = transaction.recipientPhone?.trim();
+    if (name != null && name.isNotEmpty) {
+      return transaction.amount < 0 ? 'To $name' : 'From $name';
+    }
+    if (phone != null && phone.isNotEmpty) {
+      return transaction.amount < 0 ? 'To $phone' : 'From $phone';
+    }
+    return _formatTransactionType();
+  }
+
+  String _buildSubtitle() {
+    final type = _formatTransactionType();
+    final date = DateFormat('dd MMM, yyyy').format(transaction.createdAt);
+    return '$type • $date';
+  }
+
+  String _formatTransactionType() {
+    final raw = (transaction.transType ?? transaction.type ?? '').toLowerCase();
+    if (raw.contains('airtime') || raw.contains('airtopup')) return 'Airtime';
+    if (raw.contains('data')) return 'Data Bundle';
+    if (raw.contains('momo') || raw.contains('mobile')) return 'Mobile Money';
+    if (raw.isEmpty) return 'Transfer';
+    return raw
+        .replaceAll(RegExp(r'[_-]'), ' ')
+        .split(RegExp(r'\s+'))
+        .map((word) => word.isEmpty
+            ? word
+            : '${word[0].toUpperCase()}${word.substring(1)}')
+        .join(' ');
+  }
+
+  IconData _iconForTransaction() {
+    final raw = (transaction.transType ?? transaction.type ?? '').toLowerCase();
+    if (raw.contains('airtime') || raw.contains('airtopup')) {
+      return Icons.signal_cellular_alt_rounded;
+    }
+    if (raw.contains('data')) return Icons.wifi_rounded;
+    if (raw.contains('momo') || raw.contains('mobile')) {
+      return Icons.phone_android_rounded;
+    }
+    return Icons.swap_horiz_rounded;
+  }
+
+  Color _statusColor(String status, bool isDark) {
+    if (status.contains('pending') || status.contains('processing')) {
+      return AppColors.warning;
+    }
+    if (status.contains('fail') || status.contains('error')) {
+      return AppColors.error;
+    }
+    return isDark ? AppColors.darkSuccess : AppColors.lightSuccess;
+  }
+}
+
+class _OverviewCards extends StatelessWidget {
+  final StatisticsData data;
+
+  const _OverviewCards({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final netFlow = data.totalIncome - data.totalExpenses;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = (constraints.maxWidth - AppSpacing.md) / 2;
+        return Wrap(
+          spacing: AppSpacing.md,
+          runSpacing: AppSpacing.md,
+          children: [
+            SizedBox(
+              width: cardWidth,
+              child: _OverviewCard(
+                title: 'Total Spent',
+                amount: data.totalExpenses,
+                icon: Icons.trending_down_rounded,
+                accent: AppColors.error,
+              ),
+            ),
+            SizedBox(
+              width: cardWidth,
+              child: _OverviewCard(
+                title: 'Total Income',
+                amount: data.totalIncome,
+                icon: Icons.trending_up_rounded,
+                accent: AppColors.success,
+              ),
+            ),
+            SizedBox(
+              width: cardWidth,
+              child: _OverviewCard(
+                title: 'Net Flow',
+                amount: netFlow,
+                icon: Icons.swap_vert_rounded,
+                accent: netFlow >= 0 ? AppColors.success : AppColors.error,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _OverviewCard extends StatelessWidget {
+  final String title;
+  final double amount;
+  final IconData icon;
+  final Color accent;
+
+  const _OverviewCard({
+    required this.title,
+    required this.amount,
+    required this.icon,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final formatter = NumberFormat.compactCurrency(symbol: 'GHS ', decimalDigits: 0);
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        boxShadow: AppShadows.sm,
+        border: Border.all(color: accent.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: accent.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: Icon(icon, color: accent, size: 22),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.lightTextSecondary,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  formatter.format(amount.abs()),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OverviewSkeleton extends StatelessWidget {
+  const _OverviewSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseColor = isDark ? AppColors.darkCard : AppColors.lightCard;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = (constraints.maxWidth - AppSpacing.md) / 2;
+        return Wrap(
+          spacing: AppSpacing.md,
+          runSpacing: AppSpacing.md,
+          children: List.generate(
+            3,
+            (index) => Container(
+              width: cardWidth,
+              height: 72,
+              decoration: BoxDecoration(
+                color: baseColor,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _HistoryLoadingState extends StatelessWidget {
+  const _HistoryLoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseColor = isDark ? AppColors.darkCard : AppColors.lightCard;
+    return Column(
+      children: List.generate(
+        3,
+        (index) => Container(
+          height: 72,
+          margin: EdgeInsets.only(bottom: index < 2 ? AppSpacing.sm : 0),
+          decoration: BoxDecoration(
+            color: baseColor,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyHistoryState extends StatelessWidget {
+  const _EmptyHistoryState();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : AppColors.lightCard,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.brandPrimary.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.receipt_long_rounded, color: AppColors.brandPrimary),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'No activity yet',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Your recent transactions will appear here once available.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.lightTextSecondary,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -26,6 +26,20 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
   String _statusMessage = '';
   PaymentFlowState _paymentState = PaymentFlowState.idle;
 
+  static const _countriesRequiringZero = [
+    'CI',
+    'SN',
+    'ML',
+    'BF',
+    'NE',
+    'TG',
+    'BJ',
+    'GN',
+    'CG',
+    'CD',
+    'CM',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -144,6 +158,9 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
       return;
     }
 
+    final normalizedPhone = _normalizePhoneNumber(country, phoneNumber);
+    final displayPhone = _formatPhoneForDisplay(country, normalizedPhone);
+
     setState(() {
       _isProcessing = true;
       _error = null;
@@ -171,9 +188,9 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
       final topupParams = TopupParams(
         operatorId: operatorData.operatorId,
         amount: amount,
-        description: 'International airtime recharge for $phoneNumber (${operatorData.name})',
+        description: 'International airtime recharge for $displayPhone (${operatorData.name})',
         recipientEmail: user?.email ?? 'user@example.com',
-        recipientNumber: phoneNumber,
+        recipientNumber: normalizedPhone,
         recipientCountryCode: country.code,
         senderNumber: user?.phoneNumber ?? '',
         senderCountryCode: user?.country ?? 'GH',
@@ -194,10 +211,10 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
         firstName: user?.firstName ?? 'User',
         lastName: user?.lastName ?? '',
         email: user?.email ?? 'user@example.com',
-        phoneNumber: phoneNumber,
+        phoneNumber: normalizedPhone,
         username: user?.username ?? 'user',
         amount: paymentAmount,
-        orderDesc: 'Airtime purchase for $phoneNumber - ${operatorData.name}: ${operatorData.destinationCurrencySymbol}${amount.toStringAsFixed(2)} (≈ ${paymentCurrency}${paymentAmount.toStringAsFixed(2)}) on ${DateTime.now().toString().split(' ')[0]}',
+        orderDesc: 'Airtime purchase for $displayPhone - ${operatorData.name}: ${operatorData.destinationCurrencySymbol}${amount.toStringAsFixed(2)} (≈ ${paymentCurrency}${paymentAmount.toStringAsFixed(2)}) on ${DateTime.now().toString().split(' ')[0]}',
         topupParams: topupParams,
       );
 
@@ -210,7 +227,7 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
         // App will detect when user returns via lifecycle observer
       } else {
         setState(() {
-          _error = result.message;
+          _error = _sanitizePhoneError(result.message, country);
           _isProcessing = false;
           _statusMessage = '';
           _paymentState = PaymentFlowState.failed;
@@ -218,7 +235,10 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
       }
     } catch (e) {
       setState(() {
-        _error = e.toString().replaceAll('Exception: ', '');
+        _error = _sanitizePhoneError(
+          e.toString().replaceAll('Exception: ', ''),
+          country,
+        );
         _isProcessing = false;
         _statusMessage = '';
         _paymentState = PaymentFlowState.failed;
@@ -227,6 +247,7 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
   }
 
   Future<void> _creditAirtime() async {
+    final wizardState = ref.read(airtimeWizardProvider);
     setState(() {
       _statusMessage = 'Crediting airtime...';
       _paymentState = PaymentFlowState.crediting;
@@ -263,7 +284,7 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
         }
       } else {
         setState(() {
-          _error = result.message;
+          _error = _sanitizePhoneError(result.message, wizardState.selectedCountry);
           _isProcessing = false;
           _statusMessage = '';
           _paymentState = PaymentFlowState.failed;
@@ -271,12 +292,62 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
       }
     } catch (e) {
       setState(() {
-        _error = e.toString().replaceAll('Exception: ', '');
+        _error = _sanitizePhoneError(
+          e.toString().replaceAll('Exception: ', ''),
+          wizardState.selectedCountry,
+        );
         _isProcessing = false;
         _statusMessage = '';
         _paymentState = PaymentFlowState.failed;
       });
     }
+  }
+
+  String _normalizePhoneNumber(Country country, String rawPhone) {
+    var phone = rawPhone.replaceAll(RegExp(r'[^\d]'), '');
+    final countryCode = _getCountryCode(country);
+
+    if (phone.startsWith(countryCode)) {
+      phone = phone.substring(countryCode.length);
+    }
+
+    if (!_countriesRequiringZero.contains(country.code) && phone.startsWith('0')) {
+      phone = phone.substring(1);
+    }
+
+    return '$countryCode$phone';
+  }
+
+  String _formatPhoneForDisplay(Country country, String rawPhone) {
+    final normalized = _normalizePhoneNumber(country, rawPhone);
+    final countryCode = _getCountryCode(country);
+    final local = normalized.startsWith(countryCode)
+        ? normalized.substring(countryCode.length)
+        : normalized;
+    return '+$countryCode $local';
+  }
+
+  String _sanitizePhoneError(String message, Country? country) {
+    if (country == null) return message;
+    final lower = message.toLowerCase();
+    if (lower.contains('phone number') && lower.contains('country code')) {
+      final countryCode = _getCountryCode(country);
+      return 'That phone number doesn\'t match ${country.name}. Remove the leading 0 after $countryCode and try again.';
+    }
+    return message;
+  }
+
+  String _getCountryCode(Country country) {
+    if (country.callingCodes != null && country.callingCodes!.isNotEmpty) {
+      return country.callingCodes!.first.replaceFirst(RegExp(r'^\+'), '');
+    }
+    const codes = {
+      'NG': '234',
+      'GH': '233',
+      'KE': '254',
+      'ZA': '27',
+    };
+    return codes[country.code] ?? '234';
   }
 
   Widget _buildMomoStep(String number, String text, String? boldText) {
@@ -395,7 +466,13 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
                           ),
                     ),
                     const SizedBox(height: AppSpacing.lg),
-                    _buildConfirmationCard(context, country, operatorData, phoneNumber, amount),
+                    _buildConfirmationCard(
+                      context,
+                      country,
+                      operatorData,
+                      _formatPhoneForDisplay(country, phoneNumber),
+                      amount,
+                    ),
                     if (_statusMessage.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.md),
                       _buildStatusIndicator(context),

@@ -20,7 +20,7 @@ class EnterPhoneScreen extends ConsumerStatefulWidget {
 }
 
 class _EnterPhoneScreenState extends ConsumerState<EnterPhoneScreen> {
-  final _phoneController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   bool _isDetecting = false;
   AutodetectData? _detectedOperator;
   String? _error;
@@ -47,6 +47,20 @@ class _EnterPhoneScreenState extends ConsumerState<EnterPhoneScreen> {
     super.dispose();
   }
 
+  static const _countriesRequiringZero = [
+    'CI',
+    'SN',
+    'ML',
+    'BF',
+    'NE',
+    'TG',
+    'BJ',
+    'GN',
+    'CG',
+    'CD',
+    'CM',
+  ];
+
   Future<void> _autodetectOperator() async {
     final int requestId = ++_detectSeq;
     final country = ref.read(airtimeWizardProvider).selectedCountry;
@@ -56,33 +70,7 @@ class _EnterPhoneScreenState extends ConsumerState<EnterPhoneScreen> {
     String phone = _phoneController.text.replaceAll(RegExp(r'[^\d]'), '');
     if (phone.length < 7) return;
 
-    // Get country code (without +)
-    final countryCode = _getCountryCode(country);
-    
-    // Remove country code from phone if it's already there
-    if (phone.startsWith(countryCode)) {
-      phone = phone.substring(countryCode.length);
-    }
-    
-    // Smart handling of leading zero based on country
-    // Some countries require the leading zero for operator detection
-    final countriesRequiringZero = ['CI', 'SN', 'ML', 'BF', 'NE', 'TG', 'BJ', 'GN', 'CG', 'CD', 'CM'];
-    
-    String localPhone;
-    if (countriesRequiringZero.contains(country.code)) {
-      // For these countries, keep the leading zero if present
-      localPhone = phone;
-    } else {
-      // For other countries, strip leading zero (common in local phone numbers)
-      if (phone.startsWith('0')) {
-        localPhone = phone.substring(1);
-      } else {
-        localPhone = phone;
-      }
-    }
-    
-    // Prepend country code to phone number for API
-    final fullPhoneNumber = '$countryCode$localPhone';
+    final fullPhoneNumber = _normalizePhoneNumber(country, phone);
 
     setState(() {
       _isDetecting = true;
@@ -114,17 +102,49 @@ class _EnterPhoneScreenState extends ConsumerState<EnterPhoneScreen> {
           ..setOperatorData(response.data!);
       } else {
         setState(() {
-          _error = response.message;
+          _error = _sanitizePhoneError(
+            response.message.isNotEmpty
+                ? response.message
+                : 'We could not detect the network for this number. Check the digits and try again.',
+            country,
+          );
           _isDetecting = false;
         });
       }
     } catch (e) {
       if (!mounted || requestId != _detectSeq) return;
       setState(() {
-        _error = 'Failed to detect operator. Please check the phone number.';
+        _error = _sanitizePhoneError(
+          'We could not detect the network for this number. Please verify the phone number and try again.',
+          country,
+        );
         _isDetecting = false;
       });
     }
+  }
+
+  String _normalizePhoneNumber(Country country, String rawPhone) {
+    var phone = rawPhone.replaceAll(RegExp(r'[^\d]'), '');
+    final countryCode = _getCountryCode(country);
+
+    if (phone.startsWith(countryCode)) {
+      phone = phone.substring(countryCode.length);
+    }
+
+    if (!_countriesRequiringZero.contains(country.code) && phone.startsWith('0')) {
+      phone = phone.substring(1);
+    }
+
+    return '$countryCode$phone';
+  }
+
+  String _sanitizePhoneError(String message, Country country) {
+    final lower = message.toLowerCase();
+    if (lower.contains('phone number') && lower.contains('country code')) {
+      final countryCode = _getCountryCode(country);
+      return 'That phone number doesn\'t match ${country.name}. Remove the leading 0 after $countryCode and try again.';
+    }
+    return message;
   }
 
   void _useMyNumber() {

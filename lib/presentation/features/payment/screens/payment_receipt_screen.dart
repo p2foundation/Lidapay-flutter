@@ -1,10 +1,13 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../../../../core/theme/app_theme.dart';
 
 class PaymentReceiptScreen extends ConsumerStatefulWidget {
@@ -42,6 +45,7 @@ class PaymentReceiptScreen extends ConsumerStatefulWidget {
 class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen> 
     with SingleTickerProviderStateMixin {
   late AnimationController _confettiController;
+  bool _isExporting = false;
 
   @override
   void initState() {
@@ -87,6 +91,322 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
       default:
         return Icons.receipt_long_rounded;
     }
+  }
+
+  String _receiptFileName() {
+    final reference = (widget.transactionId ?? '').trim();
+    final safeReference = reference.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '');
+    final fallback = DateFormat('yyyyMMddHHmmss').format(DateTime.now());
+    final fileToken = safeReference.isEmpty ? fallback : safeReference;
+    return 'lidapay-receipt-$fileToken.pdf';
+  }
+
+  Future<void> _handlePdfAction(Future<void> Function() action) async {
+    if (_isExporting) return;
+    setState(() {
+      _isExporting = true;
+    });
+    try {
+      await action();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to export receipt: ${e.toString()}'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isExporting = false;
+        });
+      }
+    }
+  }
+
+  Future<Uint8List> _buildReceiptPdf() async {
+    final pdf = pw.Document();
+    final timestamp = widget.timestamp ?? DateTime.now();
+    final dateLabel = DateFormat('dd MMM yyyy - HH:mm').format(timestamp);
+    final amountLabel = '${widget.currency} ${widget.amount.toStringAsFixed(2)}';
+
+    final primaryColor = PdfColor.fromInt(0xFFEC4899);
+    final darkColor = PdfColor.fromInt(0xFF2D2952);
+    final mutedColor = PdfColor.fromInt(0xFF6B7280);
+    final dividerColor = PdfColor.fromInt(0xFFE5E7EB);
+
+    final isSuccess = widget.isSuccess;
+    final statusLabel = isSuccess ? 'SUCCESSFUL' : 'FAILED';
+    final statusColor = isSuccess ? PdfColor.fromInt(0xFF16A34A) : PdfColor.fromInt(0xFFEF4444);
+    final statusBackground = isSuccess ? PdfColor.fromInt(0xFFD1FAE5) : PdfColor.fromInt(0xFFFEE2E2);
+
+    pw.Widget detailRow(String label, String value) {
+      return pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Expanded(
+            child: pw.Text(
+              label,
+              style: pw.TextStyle(color: mutedColor, fontSize: 10, fontWeight: pw.FontWeight.bold),
+            ),
+          ),
+          pw.SizedBox(width: 12),
+          pw.Expanded(
+            child: pw.Text(
+              value,
+              textAlign: pw.TextAlign.right,
+              style: pw.TextStyle(color: darkColor, fontSize: 11, fontWeight: pw.FontWeight.bold),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final details = <MapEntry<String, String>>[
+      MapEntry('Transaction Type', _transactionTypeLabel),
+      MapEntry('Status', statusLabel),
+      MapEntry('Amount', amountLabel),
+      MapEntry('Recipient', widget.recipientNumber),
+      MapEntry('Date & Time', dateLabel),
+    ];
+
+    if (widget.operatorName?.trim().isNotEmpty ?? false) {
+      details.add(MapEntry('Operator', widget.operatorName!.trim()));
+    }
+    if (widget.countryName?.trim().isNotEmpty ?? false) {
+      details.add(MapEntry('Country', widget.countryName!.trim()));
+    }
+    if (widget.bundleName?.trim().isNotEmpty ?? false) {
+      details.add(MapEntry('Bundle', widget.bundleName!.trim()));
+    }
+    if (widget.transactionId?.trim().isNotEmpty ?? false) {
+      details.add(MapEntry('Transaction ID', widget.transactionId!.trim()));
+    }
+
+    final detailWidgets = <pw.Widget>[];
+    for (var i = 0; i < details.length; i++) {
+      detailWidgets.add(detailRow(details[i].key, details[i].value));
+      if (i < details.length - 1) {
+        detailWidgets.add(pw.SizedBox(height: 8));
+        detailWidgets.add(pw.Container(height: 1, color: dividerColor));
+        detailWidgets.add(pw.SizedBox(height: 8));
+      }
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (context) {
+          return [
+            pw.Container(
+              padding: const pw.EdgeInsets.all(16),
+              decoration: pw.BoxDecoration(
+                color: primaryColor,
+                borderRadius: pw.BorderRadius.circular(12),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'LidaPay',
+                        style: pw.TextStyle(
+                          color: PdfColors.white,
+                          fontSize: 20,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        'Transaction Receipt',
+                        style: pw.TextStyle(
+                          color: PdfColors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: pw.BoxDecoration(
+                      color: statusBackground,
+                      borderRadius: pw.BorderRadius.circular(20),
+                    ),
+                    child: pw.Text(
+                      statusLabel,
+                      style: pw.TextStyle(
+                        color: statusColor,
+                        fontSize: 10,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 24),
+            pw.Text(
+              'Amount',
+              style: pw.TextStyle(color: mutedColor, fontSize: 11),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              amountLabel,
+              style: pw.TextStyle(color: darkColor, fontSize: 22, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 16),
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(16),
+              decoration: pw.BoxDecoration(
+                color: PdfColor.fromInt(0xFFF8FAFC),
+                borderRadius: pw.BorderRadius.circular(12),
+                border: pw.Border.all(color: dividerColor),
+              ),
+              child: pw.Column(children: detailWidgets),
+            ),
+            if (!isSuccess && widget.errorMessage?.trim().isNotEmpty == true) ...[
+              pw.SizedBox(height: 16),
+              pw.Text(
+                'Failure Reason',
+                style: pw.TextStyle(color: mutedColor, fontSize: 11),
+              ),
+              pw.SizedBox(height: 6),
+              pw.Text(
+                widget.errorMessage!.trim(),
+                style: pw.TextStyle(color: darkColor, fontSize: 12),
+              ),
+            ],
+            pw.SizedBox(height: 16),
+            pw.Text(
+              'Generated on ${DateFormat('dd MMM yyyy - HH:mm').format(DateTime.now())}',
+              style: pw.TextStyle(color: mutedColor, fontSize: 9),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'Powered by LidaPay',
+              style: pw.TextStyle(color: primaryColor, fontSize: 9, fontWeight: pw.FontWeight.bold),
+            ),
+          ];
+        },
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  Future<void> _shareReceiptPdf() async {
+    await _handlePdfAction(() async {
+      final pdfBytes = await _buildReceiptPdf();
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename: _receiptFileName(),
+      );
+    });
+  }
+
+  Future<void> _downloadReceiptPdf() async {
+    await _handlePdfAction(() async {
+      await Printing.layoutPdf(
+        name: _receiptFileName(),
+        onLayout: (format) async => _buildReceiptPdf(),
+      );
+    });
+  }
+
+  void _showReceiptActions() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: isDark ? AppColors.darkCard : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  'Receipt Actions',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'Share or save a polished PDF receipt for this transaction.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                      ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.share_rounded, color: AppColors.brandPrimary),
+                  title: const Text('Share PDF'),
+                  subtitle: const Text('Send the receipt via any app.'),
+                  onTap: _isExporting
+                      ? null
+                      : () {
+                          Navigator.pop(context);
+                          _shareReceiptPdf();
+                        },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.download_rounded, color: AppColors.secondary),
+                  title: const Text('Download PDF'),
+                  subtitle: const Text('Save or print the receipt locally.'),
+                  onTap: _isExporting
+                      ? null
+                      : () {
+                          Navigator.pop(context);
+                          _downloadReceiptPdf();
+                        },
+                ),
+                if (_isExporting) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  Row(
+                    children: [
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Text(
+                        'Preparing your receipt...',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -152,7 +472,7 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
           ),
           IconButton(
             icon: const Icon(Icons.share_rounded),
-            onPressed: _shareReceipt,
+            onPressed: _showReceiptActions,
           ),
         ],
       ),
@@ -330,7 +650,7 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
                             ),
                       ),
                       Text(
-                        DateFormat('MMM dd, yyyy • hh:mm a').format(timestamp),
+                        DateFormat('dd MMM yyyy - HH:mm').format(timestamp),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: isDark 
                                   ? AppColors.darkTextMuted 
@@ -498,7 +818,7 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: _shareReceipt,
+                onPressed: _showReceiptActions,
                 icon: const Icon(Icons.share_rounded, size: 18),
                 label: const Text('Share'),
                 style: OutlinedButton.styleFrom(
@@ -551,28 +871,6 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
     );
   }
 
-  void _shareReceipt() {
-    final timestamp = widget.timestamp ?? DateTime.now();
-    
-    final receiptText = '''
-🧾 LidaPay Transaction Receipt
-
-${widget.isSuccess ? '✅ Transaction Successful' : '❌ Transaction Failed'}
-
-📱 Type: $_transactionTypeLabel
-💰 Amount: ${widget.currency} ${widget.amount.toStringAsFixed(2)}
-📞 Recipient: ${widget.recipientNumber}
-${widget.operatorName != null ? '🏢 Operator: ${widget.operatorName}' : ''}
-${widget.countryName != null ? '🌍 Country: ${widget.countryName}' : ''}
-${widget.bundleName != null ? '📦 Bundle: ${widget.bundleName}' : ''}
-📅 Date: ${DateFormat('MMM dd, yyyy • hh:mm a').format(timestamp)}
-${widget.transactionId != null ? '🔖 Transaction ID: ${widget.transactionId}' : ''}
-
-Powered by LidaPay
-''';
-
-    Share.share(receiptText, subject: 'LidaPay Transaction Receipt');
-  }
 }
 
 class _ReceiptRow extends StatelessWidget {

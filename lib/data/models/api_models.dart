@@ -120,6 +120,9 @@ class User with _$User {
     List<String>? roles,
     String? password, // API returns this but shouldn't be used
     @Default(false) bool isVerified,
+    @Default(false) bool emailVerified,
+    @Default(false) bool phoneVerified,
+    @Default(0) int points,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) = _User;
@@ -190,6 +193,65 @@ class ResetPasswordRequest with _$ResetPasswordRequest {
 
   factory ResetPasswordRequest.fromJson(Map<String, dynamic> json) =>
       _$ResetPasswordRequestFromJson(json);
+}
+
+// Email Verification Request
+@freezed
+class EmailVerificationRequest with _$EmailVerificationRequest {
+  const factory EmailVerificationRequest({
+    required String email,
+  }) = _EmailVerificationRequest;
+
+  factory EmailVerificationRequest.fromJson(Map<String, dynamic> json) =>
+      _$EmailVerificationRequestFromJson(json);
+}
+
+// Email Verification Confirmation
+@freezed
+class EmailVerificationConfirmRequest with _$EmailVerificationConfirmRequest {
+  const factory EmailVerificationConfirmRequest({
+    required String email,
+    required String code,
+  }) = _EmailVerificationConfirmRequest;
+
+  factory EmailVerificationConfirmRequest.fromJson(Map<String, dynamic> json) =>
+      _$EmailVerificationConfirmRequestFromJson(json);
+}
+
+// Phone Verification Request
+@freezed
+class PhoneVerificationRequest with _$PhoneVerificationRequest {
+  const factory PhoneVerificationRequest({
+    required String phoneNumber,
+  }) = _PhoneVerificationRequest;
+
+  factory PhoneVerificationRequest.fromJson(Map<String, dynamic> json) =>
+      _$PhoneVerificationRequestFromJson(json);
+}
+
+// Phone Verification Confirmation
+@freezed
+class PhoneVerificationConfirmRequest with _$PhoneVerificationConfirmRequest {
+  const factory PhoneVerificationConfirmRequest({
+    required String phoneNumber,
+    required String code,
+  }) = _PhoneVerificationConfirmRequest;
+
+  factory PhoneVerificationConfirmRequest.fromJson(Map<String, dynamic> json) =>
+      _$PhoneVerificationConfirmRequestFromJson(json);
+}
+
+// Verification Response
+@freezed
+class VerificationResponse with _$VerificationResponse {
+  const factory VerificationResponse({
+    required bool success,
+    required String message,
+    int? pointsAwarded,
+  }) = _VerificationResponse;
+
+  factory VerificationResponse.fromJson(Map<String, dynamic> json) =>
+      _$VerificationResponseFromJson(json);
 }
 
 // Wallet Models
@@ -345,6 +407,26 @@ class Transaction with _$Transaction {
     final createdAt = json['initiatedAt'] != null 
         ? DateTime.tryParse(json['initiatedAt'] as String) ?? _createdAtFromJson(json)
         : _createdAtFromJson(json);
+
+    String? metadataToken;
+    String? metadataOrderId;
+    if (json['metadata'] is List && (json['metadata'] as List).isNotEmpty) {
+      final firstMeta = (json['metadata'] as List).first;
+      if (firstMeta is Map) {
+        metadataToken = firstMeta['token'] as String?;
+        metadataOrderId = firstMeta['order-id'] as String?;
+      }
+    }
+    final expressToken = json['expressToken'] as String?;
+    final paymentToken = expressToken ?? metadataToken;
+    
+    // Also check for token in other possible fields
+    final advansiPayToken = json['advansiPayToken'] as String?;
+    final paymentReference = json['paymentReference'] as String?;
+    final finalToken = paymentToken ?? advansiPayToken ?? paymentReference;
+
+    final operatorName = json['operator'] ?? json['operatorName'] ?? json['operator_name'];
+    final networkName = json['network'] ?? json['networkName'] ?? json['network_name'];
     
     return Transaction(
       apiId: apiId,
@@ -369,10 +451,10 @@ class Transaction with _$Transaction {
             json['provider'] as String?, // Use provider as payment method
       userId: json['userId'] as String?,
       userName: json['userName'] as String?,
-      transId: json['transId'] as String? ?? json['token'] as String?,
-      trxn: json['trxn'] as String?,
-      operator: json['operator'] as String?,
-      network: json['network'] as String?,
+      transId: json['transId'] as String? ?? metadataOrderId ?? json['token'] as String?,
+      trxn: json['trxn'] as String? ?? finalToken,
+      operator: operatorName?.toString(),
+      network: networkName?.toString(),
       retailer: json['retailer'] as String? ?? json['provider'] as String?,
     );
   }
@@ -1445,62 +1527,6 @@ class ExpressPayMethod with _$ExpressPayMethod {
 // ============================================================================
 
 @freezed
-class PointsResponse with _$PointsResponse {
-  const factory PointsResponse({
-    @Default(true) bool success,
-    @Default('') String message,
-    PointsData? data,
-  }) = _PointsResponse;
-
-  factory PointsResponse.fromJson(Map<String, dynamic> json) {
-    try {
-      // Common Swagger patterns:
-      // 1) { "points": 123 }
-      if (json['points'] is num) {
-        return PointsResponse(
-          success: true,
-          message: json['message'] as String? ?? '',
-          data: PointsData(points: (json['points'] as num).toInt()),
-        );
-      }
-
-      // 2) { "data": { "points": 123 } }
-      final data = json['data'];
-      if (data is Map<String, dynamic> && data['points'] is num) {
-        return PointsResponse(
-          success: json['success'] as bool? ?? true,
-          message: json['message'] as String? ?? '',
-          data: PointsData(points: (data['points'] as num).toInt()),
-        );
-      }
-
-      // 3) { "user": { "points": 123 } }
-      final user = json['user'];
-      if (user is Map<String, dynamic> && user['points'] is num) {
-        return PointsResponse(
-          success: json['success'] as bool? ?? true,
-          message: json['message'] as String? ?? '',
-          data: PointsData(points: (user['points'] as num).toInt()),
-        );
-      }
-
-      // 4) Fallback: try to parse as PointsData directly (defensive)
-      return PointsResponse(
-        success: json['success'] as bool? ?? true,
-        message: json['message'] as String? ?? '',
-        data: PointsData.fromJson(json),
-      );
-    } catch (e) {
-      return PointsResponse(
-        success: false,
-        message: 'Failed to parse points: $e',
-        data: const PointsData(points: 0),
-      );
-    }
-  }
-}
-
-@freezed
 class PointsData with _$PointsData {
   const factory PointsData({
     required int points,
@@ -1649,6 +1675,25 @@ class RewardResponse with _$RewardResponse {
     } catch (e) {
       return RewardResponse(success: false, message: 'Failed to parse reward: $e', data: null);
     }
+  }
+}
+
+@freezed
+class PointsResponse with _$PointsResponse {
+  const factory PointsResponse({
+    @Default(true) bool success,
+    @Default('') String message,
+    @Default(0) int points,
+    int? pointsAwarded,
+  }) = _PointsResponse;
+
+  factory PointsResponse.fromJson(Map<String, dynamic> json) {
+    return PointsResponse(
+      success: json['success'] as bool? ?? true,
+      message: json['message'] as String? ?? '',
+      points: json['points'] as int? ?? json['data']?['points'] as int? ?? 0,
+      pointsAwarded: json['pointsAwarded'] as int?,
+    );
   }
 }
 

@@ -3,6 +3,8 @@
 
 // 1. Import the provider
 import '../../../providers/currency_provider.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // 2. In your ConsumerWidget, watch the currency provider
 class YourScreen extends ConsumerWidget {
@@ -24,21 +26,21 @@ class YourScreen extends ConsumerWidget {
           formatCurrency(99.99, currentCurrency, currencyNotifier),
           style: Theme.of(context).textTheme.titleLarge,
         ),
+        
+        // 4. To change currency programmatically
+        ElevatedButton(
+          onPressed: () {
+            ref.read(currencyProvider.notifier).setCurrency('EUR');
+          },
+          child: Text('Change to EUR'),
+        ),
       ],
     );
   }
 }
 
 // Helper method to format currency
-String formatCurrency(double amount, String currency, CurrencyNotifier notifier) {
+String formatCurrency(double amount, String currency, dynamic notifier) {
   final symbol = notifier.getCurrencySymbol(currency);
   return '$symbol${amount.toStringAsFixed(2)}';
 }
-
-// 4. To change currency programmatically
-ElevatedButton(
-  onPressed: () {
-    ref.read(currencyProvider.notifier).setCurrency('EUR');
-  },
-  child: Text('Change to EUR'),
-),

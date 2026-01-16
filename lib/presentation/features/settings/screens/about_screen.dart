@@ -57,13 +57,41 @@ class AboutScreen extends StatelessWidget {
                       _BrandCard(),
                       const SizedBox(height: AppSpacing.lg),
                       Text(
-                        'LidaPay is built to make payments simple, fast, and secure.',
+                        'LidaPay is a leading digital payment platform in Ghana, designed to make payments simple, fast, and secure for everyone. We are committed to financial inclusion and empowering individuals and businesses with modern payment solutions.',
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: secondaryText),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      Text(
+                        'Our Mission',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        'To provide accessible, reliable, and innovative financial services that transform how people manage their money in the digital age.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: secondaryText),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      Text(
+                        'Why Choose LidaPay?',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        '• Secure transactions with industry-standard encryption\n'
+                        '• Instant transfers and payments\n'
+                        '• Support for multiple payment methods\n'
+                        '• 24/7 customer support\n'
+                        '• User-friendly interface',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: secondaryText),
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       _InfoRow(label: 'Version', value: '1.0.0'),
                       const SizedBox(height: AppSpacing.sm),
                       _InfoRow(label: 'Environment', value: 'Production'),
+                      const SizedBox(height: AppSpacing.sm),
+                      _InfoRow(label: 'Contact', value: '0244588584'),
+                      const SizedBox(height: AppSpacing.sm),
+                      _InfoRow(label: 'Email', value: 'info@advansistechnologies.com'),
                       const SizedBox(height: AppSpacing.xl),
                       Text(
                         'Legal',
@@ -72,14 +100,16 @@ class AboutScreen extends StatelessWidget {
                       const SizedBox(height: AppSpacing.md),
                       _LinkTile(
                         title: 'Terms of Service',
-                        subtitle: 'Coming soon',
+                        subtitle: 'View our terms',
                         gradient: AppColors.secondaryGradient,
+                        onTap: () => context.push('/terms-of-service'),
                       ),
                       const SizedBox(height: AppSpacing.sm),
                       _LinkTile(
                         title: 'Privacy Policy',
-                        subtitle: 'Coming soon',
+                        subtitle: 'View our privacy policy',
                         gradient: AppColors.primaryGradient,
+                        onTap: () => context.push('/privacy-policy'),
                       ),
                     ],
                   ),
@@ -177,11 +207,13 @@ class _LinkTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final LinearGradient gradient;
+  final VoidCallback? onTap;
 
   const _LinkTile({
     required this.title,
     required this.subtitle,
     required this.gradient,
+    this.onTap,
   });
 
   @override
@@ -190,40 +222,43 @@ class _LinkTile extends StatelessWidget {
     final borderColor = isDark ? AppColors.darkBorder : AppColors.lightBorder;
     final chevronColor = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
 
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border.all(color: borderColor),
-        boxShadow: AppShadows.sm,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              gradient: gradient,
-              borderRadius: BorderRadius.circular(AppRadius.lg),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+          border: Border.all(color: borderColor),
+          boxShadow: AppShadows.sm,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                gradient: gradient,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+              ),
+              child: const Icon(Icons.article_rounded, color: Colors.white, size: 20),
             ),
-            child: const Icon(Icons.article_rounded, color: Colors.white, size: 20),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 2),
-                Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-              ],
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
             ),
-          ),
-          Icon(Icons.chevron_right_rounded, color: chevronColor),
-        ],
-      ),
-    ).animate().fadeIn(delay: 120.ms).slideY(begin: 0.08, end: 0);
+            Icon(Icons.chevron_right_rounded, color: chevronColor),
+          ],
+        ),
+      ).animate().fadeIn(delay: 120.ms).slideY(begin: 0.08, end: 0),
+    );
   }
 }
 

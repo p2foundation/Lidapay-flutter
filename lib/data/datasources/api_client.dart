@@ -143,6 +143,24 @@ abstract class ApiClient {
   // AdvansiPay - Query Transaction Status
   @POST('${AppConstants.apiVersion}/advansispay/query-transaction')
   Future<AdvansiPayQueryResponse> queryAdvansiPayTransaction(@Body() AdvansiPayQueryRequest request);
+
+  // Email Verification
+  @POST('${AppConstants.apiVersion}/auth/verify-email/request')
+  Future<VerificationResponse> requestEmailVerification(@Body() EmailVerificationRequest request);
+
+  @POST('${AppConstants.apiVersion}/auth/verify-email/confirm')
+  Future<VerificationResponse> confirmEmailVerification(@Body() EmailVerificationConfirmRequest request);
+
+  // Phone Verification
+  @POST('${AppConstants.apiVersion}/auth/verify-phone/request')
+  Future<VerificationResponse> requestPhoneVerification(@Body() PhoneVerificationRequest request);
+
+  @POST('${AppConstants.apiVersion}/auth/verify-phone/confirm')
+  Future<VerificationResponse> confirmPhoneVerification(@Body() PhoneVerificationConfirmRequest request);
+
+  // Award Points for Verification
+  @POST('${AppConstants.apiVersion}/users/award-points')
+  Future<PointsResponse> awardVerificationPoints(@Body() Map<String, dynamic> request);
 }
 
 class DioClient {

@@ -417,24 +417,28 @@ class _AirMenuScreenState extends State<AirMenuScreen>
   }
 
   Widget _buildSearchField() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
+        color: isDark ? Colors.white.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       child: TextField(
         controller: _searchController,
         focusNode: _searchFocusNode,
-        style: const TextStyle(color: Colors.white, fontSize: 16),
+        style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 16),
+        cursorColor: isDark ? Colors.white : Colors.black87,
         decoration: InputDecoration(
           hintText: 'Search services...',
-          hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+          hintStyle: TextStyle(color: isDark ? Colors.white.withOpacity(0.7) : Colors.black54),
           border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.clear_rounded, color: Colors.white, size: 20),
+                  icon: Icon(Icons.clear_rounded, color: isDark ? Colors.white : Colors.black54, size: 20),
                   onPressed: () {
                     _searchController.clear();
                     setState(() => _searchQuery = '');

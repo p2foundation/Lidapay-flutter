@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/services/payment_service.dart';
+import '../../../../data/models/api_models.dart';
 import '../../../providers/transaction_provider.dart';
 import '../widgets/date_button.dart';
 
@@ -21,6 +23,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   DateTime? _endDate;
   final ScrollController _scrollController = ScrollController();
   bool _isApplyingFilter = false; // Prevent multiple simultaneous filter applications
+  final Set<String> _verifyingTransactions = {};
 
   @override
   void initState() {
@@ -37,6 +40,50 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     });
     // Setup scroll listener for pagination
     _scrollController.addListener(_onScroll);
+  }
+
+  List<Transaction> _applyLocalFilters(List<Transaction> transactions) {
+    if (_selectedType == null && _selectedStatus == null) {
+      return transactions;
+    }
+
+    return transactions.where((transaction) {
+      final matchesType = _selectedType == null
+          ? true
+          : _matchesType(transaction, _selectedType!);
+      final matchesStatus = _selectedStatus == null
+          ? true
+          : _normalizeStatus(transaction.status) == _selectedStatus;
+      return matchesType && matchesStatus;
+    }).toList();
+  }
+
+  bool _matchesType(Transaction transaction, String type) {
+    final raw = (transaction.transType ?? transaction.type ?? '').toLowerCase();
+    switch (type) {
+      case 'airtime':
+        return raw.contains('airtime');
+      case 'data':
+        return raw.contains('data');
+      case 'momo':
+        return raw.contains('momo');
+      default:
+        return true;
+    }
+  }
+
+  String _normalizeStatus(String status) {
+    final lower = status.toLowerCase();
+    if (lower == 'successful' || lower == 'success' || lower == 'completed') {
+      return 'completed';
+    }
+    if (lower == 'processing' || lower == 'pending') {
+      return 'pending';
+    }
+    if (lower == 'failed' || lower == 'error') {
+      return 'failed';
+    }
+    return lower;
   }
 
   @override
@@ -56,9 +103,68 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     }
   }
 
+  bool _isPendingStatus(String status) {
+    return _normalizeStatus(status) == 'pending';
+  }
+
+  Future<void> _verifyPendingTransaction(Transaction transaction) async {
+    if (_verifyingTransactions.contains(transaction.id)) {
+      return;
+    }
+
+    setState(() {
+      _verifyingTransactions.add(transaction.id);
+    });
+
+    try {
+      final result = await ref
+          .read(paymentServiceProvider)
+          .verifyPendingTransaction(transaction);
+
+      if (!mounted) return;
+
+      final color = result.success ? AppColors.success : AppColors.error;
+      final message = result.success
+          ? result.message
+          : 'Payment failed or was not authorized. Please try again.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: color,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+          showCloseIcon: true,
+        ),
+      );
+
+      if (result.success) {
+        await ref.read(transactionsNotifierProvider.notifier).refresh();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+              'Payment failed or was not authorized. Please try again.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+          showCloseIcon: true,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _verifyingTransactions.remove(transaction.id);
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final transactionsState = ref.watch(transactionsNotifierProvider);
+    final visibleTransactions = _applyLocalFilters(transactionsState.transactions);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -66,7 +172,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         child: Column(
           children: [
             // Hero Header with Gradient
-            _buildHeader(context, transactionsState),
+            _buildHeader(context, transactionsState, visibleTransactions),
             // Main Content
             Expanded(
               child: Container(
@@ -80,7 +186,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                     const SizedBox(height: AppSpacing.lg),
                     // Transactions List
                     Expanded(
-                      child: _buildTransactionsList(transactionsState),
+                      child: _buildTransactionsList(transactionsState, visibleTransactions),
                     ),
                   ],
                 ),
@@ -92,7 +198,10 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     );
   }
 
-  Widget _buildTransactionsList(TransactionsState state) {
+  Widget _buildTransactionsList(
+    TransactionsState state,
+    List<Transaction> visibleTransactions,
+  ) {
     // Show error state (only if we have an error and no transactions)
     if (state.error != null && state.transactions.isEmpty && !state.isLoading) {
       return _ErrorState(
@@ -111,7 +220,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     }
 
     // Show empty state (only if not loading and truly empty)
-    if (!state.isLoading && state.transactions.isEmpty) {
+    if (!state.isLoading && visibleTransactions.isEmpty) {
       return _EmptyState(
         isFallback: state.error != null,
         onRetry: () {
@@ -132,10 +241,10 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
       child: ListView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-        itemCount: state.transactions.length + (state.hasMore ? 1 : 0),
+        itemCount: visibleTransactions.length + (state.hasMore ? 1 : 0),
         itemBuilder: (context, index) {
           // Show load more indicator at the end
-          if (index >= state.transactions.length) {
+          if (index >= visibleTransactions.length) {
             return Padding(
               padding: const EdgeInsets.all(AppSpacing.md),
               child: Center(
@@ -153,12 +262,18 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
             );
           }
 
-          final transaction = state.transactions[index];
+          final transaction = visibleTransactions[index];
+          final isPending = _isPendingStatus(transaction.status);
+          final isVerifying = _verifyingTransactions.contains(transaction.id);
           return InkWell(
             onTap: () {
               context.push('/transactions/${transaction.id}', extra: transaction);
             },
-            child: _TransactionListItem(transaction: transaction)
+            child: _TransactionListItem(
+              transaction: transaction,
+              onVerify: isPending ? () => _verifyPendingTransaction(transaction) : null,
+              isVerifying: isVerifying,
+            )
                 .animate()
                 .fadeIn(delay: (index * 50).ms)
                 .slideX(begin: 0.1, end: 0),
@@ -170,7 +285,11 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, TransactionsState state) {
+  Widget _buildHeader(
+    BuildContext context,
+    TransactionsState state,
+    List<Transaction> visibleTransactions,
+  ) {
     return Container(
       decoration: const BoxDecoration(
         gradient: AppColors.heroGradient, // Pink to Indigo
@@ -212,18 +331,26 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
             ),
             const SizedBox(height: AppSpacing.lg),
             // Transaction Stats
-            _buildTransactionStats(state),
+            _buildTransactionStats(state, visibleTransactions),
           ],
         ),
       ),
     ).animate().fadeIn(duration: 300.ms);
   }
 
-  Widget _buildTransactionStats(TransactionsState state) {
-    final total = state.total;
-    final completed = state.transactions.where((t) => t.status.toLowerCase() == 'completed' || t.status.toLowerCase() == 'successful').length;
-    final pending = state.transactions.where((t) => t.status.toLowerCase() == 'pending').length;
-    final totalAmount = state.transactions.fold<double>(0, (sum, t) => sum + t.amount.abs());
+  Widget _buildTransactionStats(TransactionsState state, List<Transaction> visibleTransactions) {
+    final isFiltered = _selectedType != null || _selectedStatus != null;
+    final statTransactions = isFiltered ? visibleTransactions : state.transactions;
+    final total = isFiltered ? visibleTransactions.length : state.total;
+    final completed = statTransactions
+        .where((t) => _normalizeStatus(t.status) == 'completed')
+        .length;
+    final pending = statTransactions
+        .where((t) => _normalizeStatus(t.status) == 'pending')
+        .length;
+    final failed = statTransactions
+        .where((t) => _normalizeStatus(t.status) == 'failed')
+        .length;
 
     if (state.isLoading && state.transactions.isEmpty) {
 
@@ -254,7 +381,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     }
 
     return SizedBox(
-      height: 90,
+      height: 100,
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
@@ -280,9 +407,9 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
           ),
           const SizedBox(width: AppSpacing.sm),
           _StatCard(
-            icon: Icons.account_balance_wallet_rounded,
-            label: 'Total Amount',
-            value: 'GHS ${totalAmount.toStringAsFixed(0)}',
+            icon: Icons.error_rounded,
+            label: 'Failed',
+            value: failed.toString(),
             color: Colors.white,
           ),
         ],
@@ -335,7 +462,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   _selectedStatus = null;
                 });
                 ref.read(transactionsNotifierProvider.notifier).setFilter(
-                  transType: 'GLOBAL AIRTIME',
+                  transType: _getTransTypeForFilter('airtime'),
                 );
                 // Reset flag after a short delay
                 Future.delayed(const Duration(milliseconds: 500), () {
@@ -359,7 +486,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   _selectedStatus = null;
                 });
                 ref.read(transactionsNotifierProvider.notifier).setFilter(
-                  transType: 'DATA',
+                  transType: _getTransTypeForFilter('data'),
                 );
                 Future.delayed(const Duration(milliseconds: 500), () {
                   if (mounted) {
@@ -382,7 +509,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   _selectedStatus = null;
                 });
                 ref.read(transactionsNotifierProvider.notifier).setFilter(
-                  transType: 'MOMO',
+                  transType: _getTransTypeForFilter('momo'),
                 );
                 Future.delayed(const Duration(milliseconds: 500), () {
                   if (mounted) {
@@ -401,7 +528,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   _selectedType = null;
                 });
                 ref.read(transactionsNotifierProvider.notifier).setFilter(
-                  status: 'completed',
+                  status: _getStatusForFilter('completed'),
                 );
               },
             ),
@@ -415,7 +542,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   _selectedType = null;
                 });
                 ref.read(transactionsNotifierProvider.notifier).setFilter(
-                  status: 'pending',
+                  status: _getStatusForFilter('pending'),
                 );
               },
             ),
@@ -429,7 +556,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   _selectedType = null;
                 });
                 ref.read(transactionsNotifierProvider.notifier).setFilter(
-                  status: 'failed',
+                  status: _getStatusForFilter('failed'),
                 );
               },
             ),
@@ -457,7 +584,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
           });
           ref.read(transactionsNotifierProvider.notifier).setFilter(
             transType: type != null ? _getTransTypeForFilter(type) : null,
-            status: status,
+            status: status != null ? _getStatusForFilter(status) : null,
             startDate: start,
             endDate: end,
           );
@@ -472,11 +599,24 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
       case 'airtime':
         return 'GLOBAL AIRTIME';
       case 'data':
-        return 'DATA';
+        return 'GLOBAL DATA';
       case 'momo':
         return 'MOMO';
       default:
         return null;
+    }
+  }
+
+  String? _getStatusForFilter(String? status) {
+    switch (status) {
+      case 'completed':
+        return 'COMPLETED';
+      case 'pending':
+        return 'PENDING';
+      case 'failed':
+        return 'FAILED';
+      default:
+        return status;
     }
   }
 }
@@ -500,8 +640,8 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 80,
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm, horizontal: 8),
+      width: 100,
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm, horizontal: 12),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.12),
         borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -525,7 +665,7 @@ class _StatCard extends StatelessWidget {
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   color: color,
                   fontWeight: FontWeight.w700,
-                  fontSize: 12,
+                  fontSize: 16,
                   height: 1.2,
                 ),
             maxLines: 1,
@@ -537,7 +677,7 @@ class _StatCard extends StatelessWidget {
             label,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: color.withOpacity(0.85),
-                  fontSize: 9,
+                  fontSize: 11,
                   height: 1.2,
                 ),
             maxLines: 1,
@@ -601,15 +741,35 @@ class _FilterChip extends StatelessWidget {
 // TRANSACTION LIST ITEM
 // ============================================================================
 class _TransactionListItem extends StatelessWidget {
-  final dynamic transaction;
+  final Transaction transaction;
+  final VoidCallback? onVerify;
+  final bool isVerifying;
 
-  const _TransactionListItem({required this.transaction});
+  const _TransactionListItem({
+    required this.transaction,
+    this.onVerify,
+    this.isVerifying = false,
+  });
+
+  String _normalizeStatus(String status) {
+    final lower = status.toLowerCase();
+    if (lower == 'successful' || lower == 'success' || lower == 'completed') {
+      return 'completed';
+    }
+    if (lower == 'processing' || lower == 'pending') {
+      return 'pending';
+    }
+    if (lower == 'failed' || lower == 'error') {
+      return 'failed';
+    }
+    return lower;
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isExpense = transaction.amount < 0;
-    final status = transaction.status.toLowerCase();
+    final status = _normalizeStatus(transaction.status);
     // Use transType if available, otherwise fall back to type
     final type = (transaction.transType ?? transaction.type ?? '').toLowerCase();
     final muted = isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted;
@@ -630,91 +790,120 @@ class _TransactionListItem extends StatelessWidget {
               ]
             : AppShadows.xs,
       ),
-      child: Row(
+      child: Column(
         children: [
-          // Icon with Gradient
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              gradient: _getTypeGradient(type),
-              borderRadius: BorderRadius.circular(AppRadius.md),
-            ),
-            child: Icon(
-              _getTransactionIcon(type),
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          // Transaction Details
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  transaction.recipientName ?? transaction.recipientPhone ?? 'Transaction',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+          Row(
+            children: [
+              // Icon with Gradient
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  gradient: _getTypeGradient(type),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
-                const SizedBox(height: 2),
-                Row(
+                child: Icon(
+                  _getTransactionIcon(type),
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              // Transaction Details
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (transaction.paymentMethod != null) ...[
-                      Text(
-                        transaction.paymentMethod,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: muted,
-                            ),
-                      ),
-                      Text(
-                        ' • ',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: muted,
-                            ),
-                      ),
-                    ],
                     Text(
-                      _formatDate(transaction.createdAt),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: muted,
+                      transaction.recipientName ?? transaction.recipientPhone ?? 'Transaction',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
                           ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        if (transaction.paymentMethod != null) ...[
+                          Text(
+                            transaction.paymentMethod!,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: muted,
+                                ),
+                          ),
+                          Text(
+                            ' • ',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: muted,
+                                ),
+                          ),
+                        ],
+                        Text(
+                          _formatDate(transaction.createdAt),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: muted,
+                              ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          // Amount and Status
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${isExpense ? '-' : '+'}${transaction.currency} ${transaction.amount.abs().toStringAsFixed(2)}',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: isExpense ? AppColors.error : AppColors.success,
-                      fontWeight: FontWeight.w700,
-                    ),
               ),
-              const SizedBox(height: 2),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _getStatusColor(status).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(AppRadius.xs),
-                ),
-                child: Text(
-                  status.toUpperCase(),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: _getStatusColor(status),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 9,
-                      ),
-                ),
+              // Amount and Status
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${isExpense ? '-' : '+'}${transaction.currency} ${transaction.amount.abs().toStringAsFixed(2)}',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: isExpense ? AppColors.error : AppColors.success,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _getStatusColor(status).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(AppRadius.xs),
+                    ),
+                    child: Text(
+                      status.toUpperCase(),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: _getStatusColor(status),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 9,
+                          ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
+          if (onVerify != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: isVerifying ? null : onVerify,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.brandPrimary,
+                  side: BorderSide(color: AppColors.brandPrimary.withOpacity(0.6)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                icon: isVerifying
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.verified_rounded, size: 16),
+                label: Text(isVerifying ? 'Checking...' : 'Check Status'),
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -119,26 +119,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     child: TextField(
                       controller: _searchController,
                       autofocus: true,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
                         fontWeight: FontWeight.w500,
                       ),
                       decoration: InputDecoration(
                         hintText: 'Search transactions, services...',
                         hintStyle: TextStyle(
-                          color: Colors.white.withOpacity(0.8),
+                          color: isDark ? Colors.white.withOpacity(0.8) : Colors.black54,
                           fontWeight: FontWeight.w400,
                         ),
-                        prefixIcon: const Icon(
+                        prefixIcon: Icon(
                           Icons.search_rounded,
-                          color: Colors.white,
+                          color: isDark ? Colors.white : Colors.black54,
                           size: 22,
                         ),
                         suffixIcon: _searchQuery.isNotEmpty
                             ? IconButton(
-                                icon: const Icon(
+                                icon: Icon(
                                   Icons.clear_rounded,
-                                  color: Colors.white,
+                                  color: isDark ? Colors.white : Colors.black54,
                                   size: 20,
                                 ),
                                 onPressed: () {

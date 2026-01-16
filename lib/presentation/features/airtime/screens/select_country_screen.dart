@@ -366,20 +366,23 @@ class _SelectCountryScreenState extends ConsumerState<SelectCountryScreen> {
       child: TextField(
         controller: _searchController,
         onChanged: _filterCountries,
+        style: TextStyle(
+          color: isDark ? Colors.white : Colors.black87,
+        ),
         decoration: InputDecoration(
           hintText: 'Search countries...',
           hintStyle: TextStyle(
-            color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+            color: isDark ? AppColors.darkTextMuted : Colors.black54,
           ),
           prefixIcon: Icon(
             Icons.search_rounded,
-            color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+            color: isDark ? AppColors.darkTextMuted : Colors.black54,
           ),
           suffixIcon: _searchController.text.isNotEmpty
               ? IconButton(
                   icon: Icon(
                     Icons.clear_rounded,
-                    color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                    color: isDark ? AppColors.darkTextMuted : Colors.black54,
                   ),
                   onPressed: () {
                     _searchController.clear();

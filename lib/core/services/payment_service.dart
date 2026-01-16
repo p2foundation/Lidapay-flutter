@@ -274,7 +274,7 @@ class PaymentService {
         _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.success;
         return PaymentResult(
           success: true,
-          message: 'Airtime credited successfully!',
+          message: 'Airtime top-up successful.',
           data: response,
           transactionId: response.transactionId.toString(),
         );
@@ -282,7 +282,7 @@ class PaymentService {
         _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
         return PaymentResult(
           success: false,
-          message: 'Airtime credit failed: ${response.status}',
+          message: 'Airtime top-up failed. Please check your balance or try again.',
           errorCode: 'CREDIT_FAILED',
         );
       }
@@ -291,7 +291,7 @@ class PaymentService {
       _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
       return PaymentResult(
         success: false,
-        message: _extractErrorMessage(e),
+        message: _sanitizeTopupMessage(_extractErrorMessage(e)),
         errorCode: 'EXCEPTION',
       );
     }
@@ -329,7 +329,7 @@ class PaymentService {
         _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.success;
         return PaymentResult(
           success: true,
-          message: 'Data bundle credited successfully!',
+          message: 'Data bundle purchase successful.',
           data: response,
           transactionId: response.transactionId.toString(),
         );
@@ -337,7 +337,7 @@ class PaymentService {
         _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
         return PaymentResult(
           success: false,
-          message: 'Data bundle credit failed: ${response.status}',
+          message: 'Data bundle purchase failed. Please check your balance or try again.',
           errorCode: 'CREDIT_FAILED',
         );
       }
@@ -346,7 +346,7 @@ class PaymentService {
       _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
       return PaymentResult(
         success: false,
-        message: _extractErrorMessage(e),
+        message: _sanitizeTopupMessage(_extractErrorMessage(e)),
         errorCode: 'EXCEPTION',
       );
     }
@@ -387,7 +387,7 @@ class PaymentService {
             // Payment confirmed - return immediately
             return PaymentResult(
               success: true,
-              message: 'Payment verified successfully!',
+              message: 'Payment verified. Preparing your top-up now.',
               data: response.data,
               transactionId: response.data!.transactionId ?? response.data!.orderId,
             );
@@ -396,7 +396,7 @@ class PaymentService {
           // Payment not yet completed - store result and maybe retry
           lastResult = PaymentResult(
             success: false,
-            message: 'Payment status: $paymentStatus',
+            message: 'Payment is still processing. Please wait a moment.',
             data: response.data,
             transactionId: response.data!.transactionId ?? response.data!.orderId,
           );
@@ -407,7 +407,7 @@ class PaymentService {
           AppLogger.warning('⚠️ Payment query failed (attempt $attempt): ${response.message}', 'PaymentService');
           lastResult = PaymentResult(
             success: false,
-            message: 'Payment verification failed. Please try again or contact support.',
+            message: _sanitizeTopupMessage('Payment verification failed. Please try again or contact support.'),
             errorCode: 'QUERY_FAILED',
           );
         }
@@ -418,10 +418,8 @@ class PaymentService {
         final errorMessage = _extractErrorMessage(e);
         lastResult = PaymentResult(
           success: false,
-          message: errorMessage.contains('QUERY_FAILED') 
-              ? 'Payment verification failed. Please try again.'
-              : errorMessage,
-          errorCode: errorMessage.contains('QUERY_FAILED') ? 'QUERY_FAILED' : 'QUERY_EXCEPTION',
+          message: _sanitizeTopupMessage(errorMessage),
+          errorCode: 'QUERY_EXCEPTION',
         );
       }
       
@@ -436,8 +434,98 @@ class PaymentService {
     AppLogger.warning('⚠️ Payment verification failed after $maxRetries attempts', 'PaymentService');
     return lastResult ?? PaymentResult(
       success: false,
-      message: 'Payment verification failed after multiple attempts.',
+      message: _sanitizeTopupMessage('We couldn\'t confirm the payment yet. Please try again shortly.'),
       errorCode: 'MAX_RETRIES_EXCEEDED',
+    );
+  }
+
+  String? _resolveTransactionToken(Transaction transaction) {
+    if (transaction.trxn != null &&
+        transaction.trxn!.isNotEmpty &&
+        !transaction.trxn!.startsWith('TXN-')) {
+      return transaction.trxn;
+    }
+
+    if (transaction.transId != null &&
+        transaction.transId!.isNotEmpty &&
+        !transaction.transId!.startsWith('TXN-')) {
+      return transaction.transId;
+    }
+
+    AppLogger.warning(
+      '⚠️ No valid payment token found for transaction ${transaction.id}. Found transaction ID instead of payment token.',
+      'PaymentService',
+    );
+    return null;
+  }
+
+  bool _matchesPendingTopup(TopupParams params, Transaction transaction) {
+    final amountMatches = params.amount == transaction.amount.abs();
+    final recipientMatches = params.recipientNumber == transaction.recipientPhone;
+    final typeMatches = (transaction.transType ?? transaction.type ?? '')
+        .toLowerCase()
+        .contains(params.transType.toLowerCase().replaceAll('global', ''));
+    return amountMatches && recipientMatches && typeMatches;
+  }
+
+  bool _isVerifiablePaymentTransaction(Transaction transaction) {
+    final status = transaction.status.toLowerCase();
+    final isPending = status == 'pending' || status == 'processing';
+    final hasValidToken = (transaction.trxn != null && !transaction.trxn!.startsWith('TXN-')) ||
+        (transaction.transId != null && !transaction.transId!.startsWith('TXN-'));
+    final transType = (transaction.transType ?? '').toLowerCase();
+    final isPaymentType = transType.contains('topup') ||
+        transType.contains('payment') ||
+        transType.contains('momo');
+    return isPending && (hasValidToken || isPaymentType);
+  }
+
+  Future<PaymentResult> verifyPendingTransaction(Transaction transaction) async {
+    if (!_isVerifiablePaymentTransaction(transaction)) {
+      return PaymentResult(
+        success: false,
+        message: 'This transaction cannot be verified. Only pending payment transactions can be verified.',
+        errorCode: 'NOT_VERIFIABLE',
+      );
+    }
+
+    final token = _resolveTransactionToken(transaction);
+    if (token == null) {
+      return PaymentResult(
+        success: false,
+        message: 'Unable to verify payment: No valid payment token found. This transaction may not be a payment transaction.',
+        errorCode: 'NO_TOKEN',
+      );
+    }
+
+    final queryResult = await queryPaymentStatus(token);
+    if (!queryResult.success) {
+      return queryResult;
+    }
+
+    final pendingTopup = await getPendingTopup();
+    if (pendingTopup == null || !_matchesPendingTopup(pendingTopup, transaction)) {
+      return PaymentResult(
+        success: true,
+        message: 'Payment verified, but no pending top-up was found for this transaction.',
+        data: queryResult.data,
+        transactionId: queryResult.transactionId,
+      );
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getString('userId') ?? '';
+
+    if (pendingTopup.transType == 'GLOBALAIRTOPUP') {
+      return creditAirtime(userId: userId, params: pendingTopup);
+    } else if (pendingTopup.transType == 'GLOBALDATATOPUP') {
+      return creditData(userId: userId, params: pendingTopup);
+    }
+
+    return PaymentResult(
+      success: false,
+      message: 'Payment verified, but this transaction type is not supported for auto-crediting.',
+      errorCode: 'UNKNOWN_TYPE',
     );
   }
 
@@ -454,7 +542,7 @@ class PaymentService {
     if (topupParams == null) {
       return PaymentResult(
         success: false,
-        message: 'No pending payment found.',
+        message: _sanitizeTopupMessage('No pending payment found.'),
         errorCode: 'NO_PENDING',
       );
     }
@@ -471,9 +559,9 @@ class PaymentService {
         _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
         return PaymentResult(
           success: false,
-          message: queryResult.message.isNotEmpty 
+          message: _sanitizeTopupMessage(queryResult.message.isNotEmpty 
               ? queryResult.message 
-              : 'Payment verification failed. Please try again.',
+              : 'Payment verification failed. Please try again.'),
           errorCode: queryResult.errorCode ?? 'VERIFICATION_FAILED',
         );
       }
@@ -491,7 +579,7 @@ class PaymentService {
       } else {
         return PaymentResult(
           success: false,
-          message: 'Unknown transaction type: ${topupParams.transType}',
+          message: _sanitizeTopupMessage('Payment verified, but this transaction type is not supported for auto-crediting.'),
           errorCode: 'UNKNOWN_TYPE',
         );
       }
@@ -510,7 +598,7 @@ class PaymentService {
       } else {
         return PaymentResult(
           success: false,
-          message: 'Unknown transaction type: ${topupParams.transType}',
+          message: _sanitizeTopupMessage('Unknown transaction type: ${topupParams.transType}'),
           errorCode: 'UNKNOWN_TYPE',
         );
       }
@@ -519,14 +607,14 @@ class PaymentService {
       _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.cancelled;
       return PaymentResult(
         success: false,
-        message: 'Payment was cancelled.',
+        message: _sanitizeTopupMessage('Payment was cancelled. No charge was made.'),
         errorCode: 'CANCELLED',
       );
     } else if (status.toLowerCase() == 'pending') {
       // For pending status without token, we can't verify
       return PaymentResult(
         success: false,
-        message: 'Payment verification pending. Please wait...',
+        message: 'Payment is still pending. Please wait a moment and try again.',
         errorCode: 'PENDING',
       );
     } else {
@@ -534,7 +622,7 @@ class PaymentService {
       _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
       return PaymentResult(
         success: false,
-        message: 'Payment failed: $status',
+        message: 'Payment failed. Please try again or use another payment method.',
         errorCode: 'FAILED',
       );
     }
@@ -543,6 +631,24 @@ class PaymentService {
   /// Reset payment flow state
   void resetState() {
     _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.idle;
+  }
+
+  String _sanitizeTopupMessage(String message) {
+    final cleaned = message.replaceAll('Exception: ', '').trim();
+    final lower = cleaned.toLowerCase();
+    if (lower.contains('insufficient') && lower.contains('fund')) {
+      return 'Top-up failed due to insufficient wallet balance. Please fund your wallet and try again.';
+    }
+    if (lower.contains('cancelled') || lower.contains('canceled')) {
+      return 'Payment was cancelled. No charge was made.';
+    }
+    if (lower.contains('failed') || lower.contains('error')) {
+      return 'Top-up failed. Please try again or contact support.';
+    }
+    if (cleaned.isEmpty) {
+      return 'Top-up failed. Please try again.';
+    }
+    return cleaned;
   }
 }
 

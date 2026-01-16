@@ -38,6 +38,10 @@ import '../../presentation/features/settings/screens/wallet_screen.dart';
 import '../../presentation/features/settings/screens/language_screen.dart';
 import '../../presentation/features/settings/screens/help_center_screen.dart';
 import '../../presentation/features/settings/screens/about_screen.dart';
+import '../../presentation/features/settings/screens/terms_of_service_screen.dart';
+import '../../presentation/features/settings/screens/privacy_policy_screen.dart';
+import '../../presentation/features/settings/screens/email_verification_screen.dart';
+import '../../presentation/features/settings/screens/phone_verification_screen.dart';
 import '../../presentation/features/payment/screens/payment_callback_screen.dart';
 import '../../presentation/features/payment/screens/payment_receipt_screen.dart';
 import '../../presentation/features/ai/screens/ai_chat_screen.dart';
@@ -293,6 +297,26 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/about',
         name: 'about',
         builder: (context, state) => const AboutScreen(),
+      ),
+      GoRoute(
+        path: '/terms-of-service',
+        name: 'terms-of-service',
+        builder: (context, state) => const TermsOfServiceScreen(),
+      ),
+      GoRoute(
+        path: '/privacy-policy',
+        name: 'privacy-policy',
+        builder: (context, state) => const PrivacyPolicyScreen(),
+      ),
+      GoRoute(
+        path: '/email-verification',
+        name: 'email-verification',
+        builder: (context, state) => const EmailVerificationScreen(),
+      ),
+      GoRoute(
+        path: '/phone-verification',
+        name: 'phone-verification',
+        builder: (context, state) => const PhoneVerificationScreen(),
       ),
       
       // Payment Callback Route (for deep linking)

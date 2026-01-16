@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_gravatar/flutter_gravatar.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../../data/models/api_models.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -178,13 +179,17 @@ class ProfileScreen extends ConsumerWidget {
               ),
               const SizedBox(height: AppSpacing.lg),
 
-              // Verification Status
+              // Verification Status Section
+              _VerificationSection(user: user),
+              const SizedBox(height: AppSpacing.lg),
+
+              // Points Display
               Container(
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkCard : AppColors.lightCard,
+                  gradient: AppColors.brandGradient,
                   borderRadius: BorderRadius.circular(AppRadius.lg),
-                  boxShadow: AppShadows.sm,
+                  boxShadow: AppShadows.glow(AppColors.brandPrimary, opacity: 0.22),
                 ),
                 child: Row(
                   children: [
@@ -192,19 +197,14 @@ class ProfileScreen extends ConsumerWidget {
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: (user?.isVerified == true
-                                ? AppColors.lightSuccess
-                                : AppColors.lightWarning)
-                            .withOpacity(0.1),
+                        color: Colors.white.withOpacity(0.18),
                         borderRadius: BorderRadius.circular(AppRadius.md),
+                        border: Border.all(color: Colors.white.withOpacity(0.22)),
                       ),
-                      child: Icon(
-                        user?.isVerified == true
-                            ? Icons.verified_rounded
-                            : Icons.verified_user_outlined,
-                        color: user?.isVerified == true
-                            ? AppColors.lightSuccess
-                            : AppColors.lightWarning,
+                      child: const Icon(
+                        Icons.stars_rounded,
+                        color: Colors.white,
+                        size: 24,
                       ),
                     ),
                     const SizedBox(width: AppSpacing.md),
@@ -213,37 +213,30 @@ class ProfileScreen extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Verification Status',
+                            'Reward Points',
                             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           const SizedBox(height: AppSpacing.xs),
                           Text(
-                            user?.isVerified == true
-                                ? 'Verified'
-                                : 'Pending Verification',
-                            style: Theme.of(context).textTheme.bodySmall,
+                            '${user?.points ?? 0} points',
+                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    if (user?.isVerified != true)
-                      ElevatedButton(
-                        onPressed: () {
-                          // TODO: Start KYC verification
-                        },
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.md,
-                            vertical: AppSpacing.sm,
-                          ),
-                        ),
-                        child: const Text('Verify'),
-                      ),
+                    IconButton(
+                      icon: const Icon(Icons.chevron_right_rounded, color: Colors.white),
+                      onPressed: () => context.push('/rewards'),
+                    ),
                   ],
                 ),
-              ),
+              ).animate().fadeIn(delay: 200.ms).scale(delay: 300.ms),
             ],
           ),
         ),
@@ -267,6 +260,224 @@ class ProfileScreen extends ConsumerWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VerificationSection extends StatelessWidget {
+  final User? user;
+
+  const _VerificationSection({required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final emailVerified = user?.emailVerified ?? false;
+    final phoneVerified = user?.phoneVerified ?? false;
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : AppColors.lightCard,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        boxShadow: AppShadows.sm,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Verification Status',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          
+          // Email Verification
+          _VerificationItem(
+            icon: Icons.email_rounded,
+            title: 'Email Verification',
+            subtitle: emailVerified ? 'Verified' : 'Not verified',
+            isVerified: emailVerified,
+            points: '50 points',
+            onTap: emailVerified ? null : () => context.push('/email-verification'),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          
+          // Phone Verification
+          _VerificationItem(
+            icon: Icons.phone_rounded,
+            title: 'Phone Verification',
+            subtitle: phoneVerified ? 'Verified' : 'Not verified',
+            isVerified: phoneVerified,
+            points: '75 points',
+            onTap: phoneVerified ? null : () => context.push('/phone-verification'),
+          ),
+          
+          if (!emailVerified || !phoneVerified) ...[
+            const SizedBox(height: AppSpacing.md),
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: AppColors.brandPrimary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline_rounded, 
+                    size: 20, 
+                    color: AppColors.brandPrimary),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'Complete verifications to earn rewards and unlock all features!',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.brandPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.08, end: 0);
+  }
+}
+
+class _VerificationItem extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool isVerified;
+  final String points;
+  final VoidCallback? onTap;
+
+  const _VerificationItem({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.isVerified,
+    required this.points,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: isVerified 
+              ? AppColors.lightSuccess.withOpacity(0.1)
+              : onTap != null 
+                  ? AppColors.brandPrimary.withOpacity(0.05)
+                  : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(
+            color: isVerified 
+                ? AppColors.lightSuccess.withOpacity(0.3)
+                : onTap != null
+                    ? AppColors.brandPrimary.withOpacity(0.2)
+                    : AppColors.darkBorder,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: isVerified 
+                    ? AppColors.lightSuccess.withOpacity(0.2)
+                    : onTap != null
+                        ? AppColors.brandPrimary.withOpacity(0.1)
+                        : AppColors.darkBorder.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Icon(
+                icon,
+                color: isVerified 
+                    ? AppColors.lightSuccess
+                    : onTap != null
+                        ? AppColors.brandPrimary
+                        : isDark 
+                            ? AppColors.darkTextSecondary 
+                            : AppColors.lightTextSecondary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isVerified 
+                              ? AppColors.lightSuccess
+                              : isDark 
+                                  ? AppColors.darkTextSecondary 
+                                  : AppColors.lightTextSecondary,
+                        ),
+                      ),
+                      if (!isVerified && onTap != null) ...[
+                        const SizedBox(width: AppSpacing.sm),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.xs,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.brandPrimary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(AppRadius.xs),
+                          ),
+                          child: Text(
+                            '+$points',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppColors.brandPrimary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (isVerified)
+              Icon(
+                Icons.verified_rounded,
+                color: AppColors.lightSuccess,
+                size: 20,
+              )
+            else if (onTap != null)
+              Icon(
+                Icons.chevron_right_rounded,
+                color: isDark 
+                    ? AppColors.darkTextSecondary 
+                    : AppColors.lightTextSecondary,
+                size: 20,
+              ),
+          ],
         ),
       ),
     );
