@@ -96,8 +96,8 @@ flutter_launcher_icons:
   adaptive_icon_foreground: "assets/icons/lidapay_logo.png"
   # Ensure icon is properly sized and centered
   icon_size: 48 # mdpi size (48dp)
-  # Reduce padding for better fit
-  adaptive_icon_padding: 0
+  # Add padding so logo sits inside the white ring
+  adaptive_icon_padding: 0.3
   # Remove extra padding
   remove_alpha_ios: true
 

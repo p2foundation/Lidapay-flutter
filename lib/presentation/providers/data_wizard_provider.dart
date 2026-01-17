@@ -8,6 +8,7 @@ class DataWizardState {
   final List<DataOperator>? availableOperators;
   final DataOperator? selectedOperator;
   final DataBundle? selectedBundle;
+  final Map<int, Map<String, dynamic>>? operatorMetadata;
   final String? customIdentifier;
 
   DataWizardState({
@@ -17,6 +18,7 @@ class DataWizardState {
     this.availableOperators,
     this.selectedOperator,
     this.selectedBundle,
+    this.operatorMetadata,
     this.customIdentifier,
   });
 
@@ -27,6 +29,7 @@ class DataWizardState {
     List<DataOperator>? availableOperators,
     DataOperator? selectedOperator,
     DataBundle? selectedBundle,
+    Map<int, Map<String, dynamic>>? operatorMetadata,
     String? customIdentifier,
     bool clearCountry = false,
     bool clearPhone = false,
@@ -34,6 +37,7 @@ class DataWizardState {
     bool clearOperators = false,
     bool clearSelectedOperator = false,
     bool clearBundle = false,
+    bool clearOperatorMetadata = false,
     bool clearIdentifier = false,
   }) {
     return DataWizardState(
@@ -43,6 +47,7 @@ class DataWizardState {
       availableOperators: clearOperators ? null : (availableOperators ?? this.availableOperators),
       selectedOperator: clearSelectedOperator ? null : (selectedOperator ?? this.selectedOperator),
       selectedBundle: clearBundle ? null : (selectedBundle ?? this.selectedBundle),
+      operatorMetadata: clearOperatorMetadata ? null : (operatorMetadata ?? this.operatorMetadata),
       customIdentifier: clearIdentifier ? null : (customIdentifier ?? this.customIdentifier),
     );
   }
@@ -63,11 +68,19 @@ class DataWizardNotifier extends StateNotifier<DataWizardState> {
       clearOperators: true,
       clearSelectedOperator: true,
       clearBundle: true,
+      clearOperatorMetadata: true,
     );
   }
 
   void setPhoneNumber(String phone) {
-    state = state.copyWith(phoneNumber: phone, clearOperator: true, clearOperators: true, clearSelectedOperator: true, clearBundle: true);
+    state = state.copyWith(
+      phoneNumber: phone,
+      clearOperator: true,
+      clearOperators: true,
+      clearSelectedOperator: true,
+      clearBundle: true,
+      clearOperatorMetadata: true,
+    );
   }
 
   void setOperatorData(AutodetectData data) {
@@ -76,6 +89,10 @@ class DataWizardNotifier extends StateNotifier<DataWizardState> {
 
   void setAvailableOperators(List<DataOperator> operators) {
     state = state.copyWith(availableOperators: operators);
+  }
+
+  void setOperatorMetadata(Map<int, Map<String, dynamic>> metadata) {
+    state = state.copyWith(operatorMetadata: metadata);
   }
 
   void selectOperator(DataOperator operator) {

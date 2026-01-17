@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../providers/transaction_provider.dart';
 import '../../../../data/models/api_models.dart';
 
@@ -95,9 +96,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           children: [
             Row(
               children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                  onPressed: () => context.pop(),
+                AppBackButton(
+                  onTap: () => context.pop(),
+                  backgroundColor: Colors.white.withOpacity(0.2),
+                  iconColor: Colors.white,
                 ),
                 Expanded(
                   child: Container(

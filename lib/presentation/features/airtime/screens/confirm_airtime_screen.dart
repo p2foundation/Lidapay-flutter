@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/services/payment_service.dart';
 import '../../../../data/models/api_models.dart';
@@ -25,6 +26,7 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
   String? _error;
   String _statusMessage = '';
   PaymentFlowState _paymentState = PaymentFlowState.idle;
+  bool _isNavigatingToReceipt = false;
 
   static const _countriesRequiringZero = [
     'CI',
@@ -126,15 +128,99 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
     );
 
     if (result == true) {
-      await _creditAirtime();
+      await _verifyPaymentAndCredit();
     } else {
+      final reference = await _resolvePaymentReference();
       setState(() {
         _isProcessing = false;
         _paymentState = PaymentFlowState.cancelled;
         _statusMessage = '';
         _error = 'Payment was cancelled.';
       });
+      if (mounted) {
+        _showFailureReceipt('Payment was cancelled.', transactionId: reference);
+      }
       ref.read(paymentServiceProvider).clearPendingPayment();
+    }
+  }
+
+  Future<String?> _resolvePaymentReference() async {
+    final paymentService = ref.read(paymentServiceProvider);
+    final paymentInfo = await paymentService.getPaymentInfo();
+    if (paymentInfo.orderId != null && paymentInfo.orderId!.isNotEmpty) {
+      return paymentInfo.orderId;
+    }
+    final topupParams = await paymentService.getPendingTopup();
+    return topupParams?.payTransRef;
+  }
+
+  Future<void> _verifyPaymentAndCredit() async {
+    setState(() {
+      _statusMessage = 'Verifying payment...';
+      _error = null;
+      _isProcessing = true;
+    });
+
+    final paymentService = ref.read(paymentServiceProvider);
+    final paymentInfo = await paymentService.getPaymentInfo();
+    final token = paymentInfo.token;
+
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _error = 'We couldn\'t verify the payment. Please try again.';
+        _isProcessing = false;
+        _statusMessage = '';
+        _paymentState = PaymentFlowState.failed;
+      });
+      if (mounted) {
+        _showFailureReceipt(
+          'We couldn\'t verify the payment. Please try again.',
+          transactionId: paymentInfo.orderId,
+        );
+      }
+      return;
+    }
+
+    const maxAttempts = 3;
+    PaymentResult? lastResult;
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = 'Verifying payment... ($attempt/$maxAttempts)';
+      });
+
+      final result = await paymentService.queryPaymentStatus(
+        token,
+        maxRetries: 1,
+        retryDelaySeconds: 0,
+      );
+      if (!mounted) return;
+
+      if (result.success) {
+        await _creditAirtime();
+        return;
+      }
+
+      lastResult = result;
+
+      if (attempt < maxAttempts) {
+        await Future.delayed(const Duration(seconds: 4));
+      }
+    }
+
+    final message = (lastResult?.message.isNotEmpty ?? false)
+        ? lastResult!.message
+        : 'We couldn\'t confirm the payment yet. Please try again shortly.';
+
+    setState(() {
+      _error = message;
+      _isProcessing = false;
+      _statusMessage = '';
+      _paymentState = PaymentFlowState.failed;
+    });
+    if (mounted) {
+      _showFailureReceipt(message, transactionId: paymentInfo.orderId);
     }
   }
 
@@ -178,7 +264,9 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
       final fxRate = operatorData.fx?['rate'] as double?;
       final fxCurrencyCode = operatorData.fx?['currencyCode'] as String?;
       final paymentAmount = fxRate != null ? (amount * fxRate) : amount;
-      final paymentCurrency = fxCurrencyCode ?? 'GHS';
+      final paymentCurrency = fxCurrencyCode ?? country.currencyCode ?? 'GHS';
+      final senderSymbol = operatorData.senderCurrencySymbol;
+      final senderCurrency = operatorData.senderCurrencyCode;
 
       // Generate unique reference
       final payTransRef = generatePaymentReference();
@@ -188,7 +276,7 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
       final topupParams = TopupParams(
         operatorId: operatorData.operatorId,
         amount: amount,
-        description: 'International airtime recharge for $displayPhone (${operatorData.name})',
+        description: 'Top-up: $senderCurrency ${amount.toStringAsFixed(2)} | Pay: $paymentCurrency ${paymentAmount.toStringAsFixed(2)} for $displayPhone (${operatorData.name})',
         recipientEmail: user?.email ?? 'user@example.com',
         recipientNumber: normalizedPhone,
         recipientCountryCode: country.code,
@@ -214,11 +302,18 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
         phoneNumber: normalizedPhone,
         username: user?.username ?? 'user',
         amount: paymentAmount,
-        orderDesc: 'Airtime purchase for $displayPhone - ${operatorData.name}: ${operatorData.destinationCurrencySymbol}${amount.toStringAsFixed(2)} (≈ ${paymentCurrency}${paymentAmount.toStringAsFixed(2)}) on ${DateTime.now().toString().split(' ')[0]}',
+        orderDesc: 'Airtime purchase for $displayPhone - ${operatorData.name}: ${senderSymbol}${amount.toStringAsFixed(2)} (≈ ${paymentCurrency}${paymentAmount.toStringAsFixed(2)}) on ${DateTime.now().toString().split(' ')[0]}',
         topupParams: topupParams,
       );
 
       if (result.success) {
+        await paymentService.storePaymentDisplayInfo(
+          result.transactionId,
+          topupAmount: amount,
+          topupCurrency: senderCurrency,
+          paymentAmount: paymentAmount,
+          paymentCurrency: paymentCurrency,
+        );
         setState(() {
           _statusMessage = 'Redirecting to payment page...';
           _paymentState = PaymentFlowState.awaitingCallback;
@@ -272,9 +367,6 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
       );
 
       if (result.success) {
-        // Reset wizard state
-        ref.read(airtimeWizardProvider.notifier).reset();
-
         // Show success dialog
         if (mounted) {
           setState(() {
@@ -282,24 +374,38 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
           });
           _showSuccessDialog(result);
         }
+        // Reset wizard state after navigation to receipt
+        ref.read(airtimeWizardProvider.notifier).reset();
       } else {
         setState(() {
-          _error = _sanitizePhoneError(result.message, wizardState.selectedCountry);
+          final message = _sanitizePhoneError(result.message, wizardState.selectedCountry);
+          _error = message;
           _isProcessing = false;
           _statusMessage = '';
           _paymentState = PaymentFlowState.failed;
         });
+        if (mounted) {
+          _showFailureReceipt(
+            _sanitizePhoneError(result.message, wizardState.selectedCountry),
+            transactionId: topupParams.payTransRef,
+          );
+        }
       }
     } catch (e) {
+      final message = _sanitizePhoneError(
+        e.toString().replaceAll('Exception: ', ''),
+        wizardState.selectedCountry,
+      );
       setState(() {
-        _error = _sanitizePhoneError(
-          e.toString().replaceAll('Exception: ', ''),
-          wizardState.selectedCountry,
-        );
+        _error = message;
         _isProcessing = false;
         _statusMessage = '';
         _paymentState = PaymentFlowState.failed;
       });
+      if (mounted) {
+        final reference = await _resolvePaymentReference();
+        _showFailureReceipt(message, transactionId: reference);
+      }
     }
   }
 
@@ -383,18 +489,68 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
     final country = wizardState.selectedCountry;
     final phoneNumber = wizardState.phoneNumber;
     final amount = wizardState.selectedAmount;
+    final fxRate = operatorData?.fx?['rate'] as double?;
+    final fxCurrencyCode = operatorData?.fx?['currencyCode'] as String?;
+    final paymentAmount = amount != null && fxRate != null ? (amount * fxRate) : amount ?? 0.0;
+    final paymentCurrency = fxCurrencyCode ?? country?.currencyCode ?? 'GHS';
+    final senderCurrency = operatorData?.senderCurrencyCode ?? 'USD';
+    
+    // Set flag before navigation to prevent redirect to select country
+    setState(() {
+      _isNavigatingToReceipt = true;
+    });
     
     // Navigate to receipt screen with transaction details
     context.go('/payment/receipt', extra: {
       'isSuccess': true,
       'transactionType': 'GLOBALAIRTOPUP',
       'transactionId': result.transactionId,
-      'amount': amount ?? 0.0,
-      'currency': country?.currencyCode ?? 'GHS',
+      'amount': paymentAmount,
+      'currency': paymentCurrency,
+      'topupAmount': amount ?? 0.0,
+      'topupCurrency': senderCurrency,
+      'paymentAmount': paymentAmount,
+      'paymentCurrency': paymentCurrency,
       'recipientNumber': phoneNumber ?? '',
       'operatorName': operatorData?.name ?? '',
       'countryName': country?.name ?? '',
       'bundleName': null,
+      'timestamp': DateTime.now(),
+    });
+  }
+
+  void _showFailureReceipt(String message, {String? transactionId}) {
+    final wizardState = ref.read(airtimeWizardProvider);
+    final operatorData = wizardState.operatorData;
+    final country = wizardState.selectedCountry;
+    final phoneNumber = wizardState.phoneNumber;
+    final amount = wizardState.selectedAmount;
+    final fxRate = operatorData?.fx?['rate'] as double?;
+    final fxCurrencyCode = operatorData?.fx?['currencyCode'] as String?;
+    final paymentAmount = amount != null && fxRate != null ? (amount * fxRate) : amount ?? 0.0;
+    final paymentCurrency = fxCurrencyCode ?? country?.currencyCode ?? 'GHS';
+    final senderCurrency = operatorData?.senderCurrencyCode ?? 'USD';
+
+    // Set flag before navigation to prevent redirect to select country
+    setState(() {
+      _isNavigatingToReceipt = true;
+    });
+
+    context.go('/payment/receipt', extra: {
+      'isSuccess': false,
+      'transactionType': 'GLOBALAIRTOPUP',
+      'transactionId': transactionId,
+      'amount': paymentAmount,
+      'currency': paymentCurrency,
+      'topupAmount': amount ?? 0.0,
+      'topupCurrency': senderCurrency,
+      'paymentAmount': paymentAmount,
+      'paymentCurrency': paymentCurrency,
+      'recipientNumber': phoneNumber ?? '',
+      'operatorName': operatorData?.name ?? '',
+      'countryName': country?.name ?? '',
+      'bundleName': null,
+      'errorMessage': message,
       'timestamp': DateTime.now(),
     });
   }
@@ -434,6 +590,14 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
     final operatorData = wizardState.operatorData;
     final amount = wizardState.selectedAmount;
 
+    // If navigating to receipt, show loading state (check this first)
+    if (_isNavigatingToReceipt) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    
+    // Redirect if missing required data
     if (country == null || phoneNumber == null || operatorData == null || amount == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => context.go('/airtime/select-country'));
       return const SizedBox.shrink();
@@ -501,17 +665,11 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: _isProcessing ? null : () => context.pop(),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 22),
-            ),
+          AppBackButton(
+            onTap: () => context.pop(),
+            enabled: !_isProcessing,
+            backgroundColor: Colors.white.withOpacity(0.2),
+            iconColor: Colors.white,
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
@@ -916,6 +1074,7 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
     final fxCurrencyCode = operatorData.fx?['currencyCode'] as String?;
     final paymentAmount = fxRate != null ? (amount * fxRate) : amount;
     final paymentCurrency = fxCurrencyCode ?? 'GHS';
+    final senderSymbol = operatorData.senderCurrencySymbol;
     
     return Row(
       children: [
@@ -941,7 +1100,7 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
               ),
               const SizedBox(height: 4),
               Text(
-                'Airtime: ${operatorData.destinationCurrencySymbol}${amount.toStringAsFixed(2)}',
+                'Top-up: $senderSymbol${amount.toStringAsFixed(2)}',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),

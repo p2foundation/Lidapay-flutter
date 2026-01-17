@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/services/payment_service.dart';
 import '../../../../data/models/api_models.dart';
 import '../../../providers/transaction_provider.dart';
@@ -232,6 +233,10 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     // Show transactions list (even if loading more)
     return Builder(
       builder: (context) {
+        final paymentDisplayInfo = ref.watch(paymentDisplayInfoProvider).maybeWhen(
+          data: (data) => data,
+          orElse: () => <String, PaymentDisplayInfo>{},
+        );
         return RefreshIndicator(
           onRefresh: () async {
             // Check if the widget is still mounted before proceeding
@@ -263,6 +268,8 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
           }
 
           final transaction = visibleTransactions[index];
+          final reference = transaction.transId ?? transaction.id;
+          final displayInfo = paymentDisplayInfo[reference];
           final isPending = _isPendingStatus(transaction.status);
           final isVerifying = _verifyingTransactions.contains(transaction.id);
           return InkWell(
@@ -271,6 +278,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
             },
             child: _TransactionListItem(
               transaction: transaction,
+              displayInfo: displayInfo,
               onVerify: isPending ? () => _verifyPendingTransaction(transaction) : null,
               isVerifying: isVerifying,
             )
@@ -302,9 +310,10 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
             // Back Button and Title
             Row(
               children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                  onPressed: () => context.pop(),
+                AppBackButton(
+                  onTap: () => context.pop(),
+                  backgroundColor: Colors.white.withOpacity(0.2),
+                  iconColor: Colors.white,
                 ),
                 Expanded(
                   child: Text(
@@ -742,11 +751,13 @@ class _FilterChip extends StatelessWidget {
 // ============================================================================
 class _TransactionListItem extends StatelessWidget {
   final Transaction transaction;
+  final PaymentDisplayInfo? displayInfo;
   final VoidCallback? onVerify;
   final bool isVerifying;
 
   const _TransactionListItem({
     required this.transaction,
+    this.displayInfo,
     this.onVerify,
     this.isVerifying = false,
   });
@@ -773,6 +784,10 @@ class _TransactionListItem extends StatelessWidget {
     // Use transType if available, otherwise fall back to type
     final type = (transaction.transType ?? transaction.type ?? '').toLowerCase();
     final muted = isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted;
+    final paymentAmount = displayInfo?.paymentAmount ?? transaction.amount.abs();
+    final paymentCurrency = displayInfo?.paymentCurrency ?? transaction.currency;
+    final topupAmount = displayInfo?.topupAmount;
+    final topupCurrency = displayInfo?.topupCurrency;
 
     return Container(
       margin: const EdgeInsets.only(bottom: AppSpacing.sm),
@@ -853,12 +868,21 @@ class _TransactionListItem extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '${isExpense ? '-' : '+'}${transaction.currency} ${transaction.amount.abs().toStringAsFixed(2)}',
+                    '${isExpense ? '-' : '+'}$paymentCurrency ${paymentAmount.toStringAsFixed(2)}',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           color: isExpense ? AppColors.error : AppColors.success,
                           fontWeight: FontWeight.w700,
                         ),
                   ),
+                  if (topupAmount != null && topupCurrency != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Top-up: $topupCurrency ${topupAmount.toStringAsFixed(2)}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: muted,
+                          ),
+                    ),
+                  ],
                   const SizedBox(height: 2),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

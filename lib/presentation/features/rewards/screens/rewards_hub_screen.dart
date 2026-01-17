@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../providers/rewards_provider.dart';
 import '../../../../data/models/api_models.dart';
 
@@ -86,17 +87,10 @@ class _Header extends StatelessWidget {
           children: [
             Row(
               children: [
-                GestureDetector(
+                AppBackButton(
                   onTap: () => context.pop(),
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.18),
-                      borderRadius: BorderRadius.circular(AppRadius.md),
-                    ),
-                    child: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                  ),
+                  backgroundColor: Colors.white.withOpacity(0.18),
+                  iconColor: Colors.white,
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Text(

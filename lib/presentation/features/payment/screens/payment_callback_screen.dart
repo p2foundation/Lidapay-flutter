@@ -65,9 +65,11 @@ class _PaymentCallbackScreenState extends ConsumerState<PaymentCallbackScreen> {
     }
   }
 
-  void _navigateToReceipt() {
+  Future<void> _navigateToReceipt() async {
     // Get pending topup params for receipt details
     final pendingPayment = ref.read(pendingPaymentProvider);
+    final paymentService = ref.read(paymentServiceProvider);
+    final displayInfo = await paymentService.getPaymentDisplayInfo(_transactionId ?? pendingPayment?.payTransRef);
     
     // Extract operator name and bundle name from payment result data if available
     String? operatorName;
@@ -82,8 +84,12 @@ class _PaymentCallbackScreenState extends ConsumerState<PaymentCallbackScreen> {
       'isSuccess': _isSuccess,
       'transactionType': pendingPayment?.transType ?? 'AIRTIME',
       'transactionId': _transactionId,
-      'amount': pendingPayment?.amount ?? 0.0,
-      'currency': 'GHS',
+      'amount': displayInfo?.paymentAmount ?? pendingPayment?.amount ?? 0.0,
+      'currency': displayInfo?.paymentCurrency ?? 'GHS',
+      'topupAmount': displayInfo?.topupAmount ?? pendingPayment?.amount,
+      'topupCurrency': displayInfo?.topupCurrency,
+      'paymentAmount': displayInfo?.paymentAmount,
+      'paymentCurrency': displayInfo?.paymentCurrency,
       'recipientNumber': pendingPayment?.recipientNumber ?? '',
       'operatorName': operatorName,
       'countryName': 'Ghana', // Default country

@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -51,8 +52,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     super.initState();
     _floatingController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat(reverse: true);
+      duration: const Duration(seconds: 12),
+    )..repeat();
     
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -207,6 +208,23 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   List<Widget> _buildFloatingElements() {
+    Widget buildRing({
+      required double size,
+      required double opacity,
+    }) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: Colors.white.withOpacity(opacity),
+            width: 1.5,
+          ),
+        ),
+      );
+    }
+
     return [
       // Large circle top right
       Positioned(
@@ -215,10 +233,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         child: AnimatedBuilder(
           animation: _floatingController,
           builder: (context, child) {
+            final t = _floatingController.value * 2 * pi;
             return Transform.translate(
               offset: Offset(
-                0,
-                20 * _floatingController.value,
+                12 * sin(t * 0.6),
+                18 * cos(t * 0.6),
               ),
               child: Container(
                 width: 300,
@@ -239,10 +258,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         child: AnimatedBuilder(
           animation: _floatingController,
           builder: (context, child) {
+            final t = _floatingController.value * 2 * pi;
             return Transform.translate(
               offset: Offset(
-                15 * (1 - _floatingController.value),
-                0,
+                10 * cos(t * 0.8),
+                12 * sin(t * 0.8),
               ),
               child: Container(
                 width: 200,
@@ -269,10 +289,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           child: AnimatedBuilder(
             animation: _floatingController,
             builder: (context, child) {
+              final t = _floatingController.value * 2 * pi;
               return Transform.translate(
                 offset: Offset(
-                  10 * _floatingController.value * (index.isEven ? 1 : -1),
-                  10 * _floatingController.value * (index.isOdd ? 1 : -1),
+                  12 * sin(t + index),
+                  12 * cos(t + index),
                 ),
                 child: Container(
                   width: 10 + (index * 6).toDouble(),
@@ -287,6 +308,49 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
         );
       }),
+      // Bottom ring cluster
+      Positioned(
+        bottom: -140,
+        left: -80,
+        child: AnimatedBuilder(
+          animation: _floatingController,
+          builder: (context, child) {
+            final t = _floatingController.value * 2 * pi;
+            return Transform.translate(
+              offset: Offset(18 * sin(t * 0.4), 10 * cos(t * 0.4)),
+              child: buildRing(size: 280, opacity: 0.12),
+            );
+          },
+        ),
+      ),
+      Positioned(
+        bottom: -165,
+        left: 10,
+        child: AnimatedBuilder(
+          animation: _floatingController,
+          builder: (context, child) {
+            final t = _floatingController.value * 2 * pi;
+            return Transform.translate(
+              offset: Offset(22 * cos(t * 0.35), 14 * sin(t * 0.35)),
+              child: buildRing(size: 340, opacity: 0.08),
+            );
+          },
+        ),
+      ),
+      Positioned(
+        bottom: -120,
+        right: -120,
+        child: AnimatedBuilder(
+          animation: _floatingController,
+          builder: (context, child) {
+            final t = _floatingController.value * 2 * pi;
+            return Transform.translate(
+              offset: Offset(16 * sin(t * 0.5), 12 * cos(t * 0.5)),
+              child: buildRing(size: 240, opacity: 0.1),
+            );
+          },
+        ),
+      ),
     ];
   }
 }

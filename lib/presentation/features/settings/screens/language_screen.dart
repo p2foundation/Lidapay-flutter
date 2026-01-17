@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/localization/app_localizations.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../providers/currency_provider.dart';
@@ -56,9 +57,10 @@ class _LanguageScreenState extends ConsumerState<LanguageScreen> with SingleTick
               children: [
                 Row(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                      onPressed: () => context.pop(),
+                    AppBackButton(
+                      onTap: () => context.pop(),
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      iconColor: Colors.white,
                     ),
                     Expanded(
                       child: Text(

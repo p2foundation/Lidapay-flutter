@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../providers/wallet_provider.dart';
 
 class WalletScreen extends ConsumerWidget {
@@ -33,9 +34,10 @@ class WalletScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(AppSpacing.lg),
               child: Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                    onPressed: () => context.pop(),
+                  AppBackButton(
+                    onTap: () => context.pop(),
+                    backgroundColor: Colors.white.withOpacity(0.2),
+                    iconColor: Colors.white,
                   ),
                   Expanded(
                     child: Text(

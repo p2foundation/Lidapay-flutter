@@ -51,8 +51,7 @@ android {
 
     buildTypes {
         release {
-            // Use debug signing for now to avoid keystore issues
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             
             // Enable code shrinking and obfuscation
             isMinifyEnabled = true

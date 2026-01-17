@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../presentation/features/onboarding/screens/onboarding_screen.dart';
@@ -50,6 +51,7 @@ import '../../data/models/api_models.dart';
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/onboarding',
+    debugLogDiagnostics: kDebugMode,
     routes: [
       // Onboarding Route
       GoRoute(
@@ -347,6 +349,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             transactionId: extra?['transactionId'],
             amount: (extra?['amount'] ?? 0.0).toDouble(),
             currency: extra?['currency'] ?? 'GHS',
+            topupAmount: (extra?['topupAmount'] as num?)?.toDouble(),
+            topupCurrency: extra?['topupCurrency'] as String?,
+            paymentAmount: (extra?['paymentAmount'] as num?)?.toDouble(),
+            paymentCurrency: extra?['paymentCurrency'] as String?,
             recipientNumber: extra?['recipientNumber'] ?? '',
             operatorName: extra?['operatorName'],
             countryName: extra?['countryName'],

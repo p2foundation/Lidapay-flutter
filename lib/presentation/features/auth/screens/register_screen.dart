@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/country_mapper.dart';
@@ -139,9 +140,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: _previousStep,
+        leading: AppBackButton(
+          onTap: _previousStep,
         ),
         title: Text(
           'Sign Up',

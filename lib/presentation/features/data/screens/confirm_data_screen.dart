@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/services/payment_service.dart';
 import '../../../../data/models/api_models.dart';
 import '../../../providers/data_wizard_provider.dart';
@@ -25,6 +26,7 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
   String? _error;
   String _statusMessage = '';
   PaymentFlowState _paymentState = PaymentFlowState.idle;
+  bool _isNavigatingToReceipt = false;
 
   @override
   void initState() {
@@ -44,6 +46,34 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
     if (state == AppLifecycleState.resumed && _paymentState == PaymentFlowState.awaitingCallback) {
       _checkPaymentStatus();
     }
+  }
+
+  String normalizeLocalNumber(String? fullNumber, Country country) {
+    if (fullNumber == null || fullNumber.isEmpty) return '';
+    final digitsOnly = fullNumber.replaceAll(RegExp(r'[^\d]'), '');
+    final fallbackCallingCodes = {
+      'NG': '234',
+      'GH': '233',
+      'KE': '254',
+      'ZA': '27',
+      'UG': '256',
+      'TZ': '255',
+      'ET': '251',
+      'RW': '250',
+      'ZM': '260',
+      'ZW': '263',
+    };
+    final callingCode = (country.callingCodes?.isNotEmpty == true)
+        ? country.callingCodes!.first.replaceFirst(RegExp(r'^\+'), '')
+        : (fallbackCallingCodes[country.code] ?? '234');
+    var localNumber = digitsOnly;
+    if (localNumber.startsWith(callingCode)) {
+      localNumber = localNumber.substring(callingCode.length);
+    }
+    if (country.code == 'GH' && localNumber.isNotEmpty && !localNumber.startsWith('0')) {
+      localNumber = '0$localNumber';
+    }
+    return localNumber;
   }
 
   Future<void> _checkPaymentStatus() async {
@@ -111,15 +141,99 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
     );
 
     if (result == true) {
-      await _creditData();
+      await _verifyPaymentAndCredit();
     } else {
+      final reference = await _resolvePaymentReference();
       setState(() {
         _isProcessing = false;
         _paymentState = PaymentFlowState.cancelled;
         _statusMessage = '';
         _error = 'Payment was cancelled.';
       });
+      if (mounted) {
+        _showFailureReceipt('Payment was cancelled.', transactionId: reference);
+      }
       ref.read(paymentServiceProvider).clearPendingPayment();
+    }
+  }
+
+  Future<String?> _resolvePaymentReference() async {
+    final paymentService = ref.read(paymentServiceProvider);
+    final paymentInfo = await paymentService.getPaymentInfo();
+    if (paymentInfo.orderId != null && paymentInfo.orderId!.isNotEmpty) {
+      return paymentInfo.orderId;
+    }
+    final topupParams = await paymentService.getPendingTopup();
+    return topupParams?.payTransRef;
+  }
+
+  Future<void> _verifyPaymentAndCredit() async {
+    setState(() {
+      _statusMessage = 'Verifying payment...';
+      _error = null;
+      _isProcessing = true;
+    });
+
+    final paymentService = ref.read(paymentServiceProvider);
+    final paymentInfo = await paymentService.getPaymentInfo();
+    final token = paymentInfo.token;
+
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _error = 'We couldn\'t verify the payment. Please try again.';
+        _isProcessing = false;
+        _statusMessage = '';
+        _paymentState = PaymentFlowState.failed;
+      });
+      if (mounted) {
+        _showFailureReceipt(
+          'We couldn\'t verify the payment. Please try again.',
+          transactionId: paymentInfo.orderId,
+        );
+      }
+      return;
+    }
+
+    const maxAttempts = 3;
+    PaymentResult? lastResult;
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = 'Verifying payment... ($attempt/$maxAttempts)';
+      });
+
+      final result = await paymentService.queryPaymentStatus(
+        token,
+        maxRetries: 1,
+        retryDelaySeconds: 0,
+      );
+      if (!mounted) return;
+
+      if (result.success) {
+        await _creditData();
+        return;
+      }
+
+      lastResult = result;
+
+      if (attempt < maxAttempts) {
+        await Future.delayed(const Duration(seconds: 4));
+      }
+    }
+
+    final message = (lastResult?.message.isNotEmpty ?? false)
+        ? lastResult!.message
+        : 'We couldn\'t confirm the payment yet. Please try again shortly.';
+
+    setState(() {
+      _error = message;
+      _isProcessing = false;
+      _statusMessage = '';
+      _paymentState = PaymentFlowState.failed;
+    });
+    if (mounted) {
+      _showFailureReceipt(message, transactionId: paymentInfo.orderId);
     }
   }
 
@@ -167,15 +281,21 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
       final timestamp = DateTime.now().millisecondsSinceEpoch;
 
       // Prepare topup params for after-payment crediting
+      final bundleLabel = selectedBundle.description.isNotEmpty
+          ? selectedBundle.description
+          : selectedBundle.name;
+      final localRecipientNumber = normalizeLocalNumber(phoneNumber, country);
+      final localSenderNumber = normalizeLocalNumber(user?.phoneNumber, country);
+
       final topupParams = TopupParams(
         operatorId: selectedOperator.operatorId,
         amount: selectedBundle.amount,
-        description: 'Data bundle: ${selectedBundle.name} for $phoneNumber (${selectedOperator.name})',
+        description: 'Data bundle: $bundleLabel for $phoneNumber (${selectedOperator.name})',
         recipientEmail: user?.email ?? 'user@example.com',
-        recipientNumber: phoneNumber,
+        recipientNumber: localRecipientNumber.isNotEmpty ? localRecipientNumber : phoneNumber,
         recipientCountryCode: country.code,
-        senderNumber: user?.phoneNumber ?? '',
-        senderCountryCode: user?.country ?? 'GH',
+        senderNumber: localSenderNumber.isNotEmpty ? localSenderNumber : (user?.phoneNumber ?? ''),
+        senderCountryCode: country.code,
         payTransRef: payTransRef,
         transType: 'GLOBALDATATOPUP',
         customerEmail: user?.email ?? '',
@@ -202,6 +322,13 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
       );
 
       if (result.success) {
+        await paymentService.storePaymentDisplayInfo(
+          result.transactionId,
+          topupAmount: selectedBundle.amount,
+          topupCurrency: selectedBundle.currency,
+          paymentAmount: paymentAmount,
+          paymentCurrency: paymentCurrency,
+        );
         setState(() {
           _statusMessage = 'Redirecting to payment page...';
           _paymentState = PaymentFlowState.awaitingCallback;
@@ -215,14 +342,22 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
           _statusMessage = '';
           _paymentState = PaymentFlowState.failed;
         });
+        if (mounted) {
+          _showFailureReceipt(result.message, transactionId: topupParams.payTransRef);
+        }
       }
     } catch (e) {
+      final message = e.toString().replaceAll('Exception: ', '');
       setState(() {
-        _error = e.toString().replaceAll('Exception: ', '');
+        _error = message;
         _isProcessing = false;
         _statusMessage = '';
         _paymentState = PaymentFlowState.failed;
       });
+      if (mounted) {
+        final reference = await _resolvePaymentReference();
+        _showFailureReceipt(message, transactionId: reference);
+      }
     }
   }
 
@@ -238,6 +373,18 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
         throw Exception('User ID not found.');
       }
 
+      final wizardState = ref.read(dataWizardProvider);
+      final selectedBundle = wizardState.selectedBundle;
+      final selectedOperator = wizardState.selectedOperator;
+      final country = wizardState.selectedCountry;
+      final phoneNumber = wizardState.phoneNumber;
+      final fxRate = selectedOperator?.fx?['rate'] as double?;
+      final fxCurrencyCode = selectedOperator?.fx?['currencyCode'] as String?;
+      final paymentAmount = selectedBundle != null && fxRate != null
+          ? (selectedBundle.amount * fxRate)
+          : selectedBundle?.amount ?? 0.0;
+      final paymentCurrency = fxCurrencyCode ?? country?.currencyCode ?? 'GHS';
+
       final paymentService = ref.read(paymentServiceProvider);
       final topupParams = await paymentService.getPendingTopup();
 
@@ -251,16 +398,28 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
       );
 
       if (result.success) {
-        // Reset wizard state
-        ref.read(dataWizardProvider.notifier).reset();
-
-        // Show success dialog
         if (mounted) {
           setState(() {
             _paymentState = PaymentFlowState.success;
           });
-          _showSuccessDialog(result);
+          context.go('/payment/receipt', extra: {
+            'isSuccess': true,
+            'transactionType': 'GLOBALDATATOPUP',
+            'transactionId': result.transactionId,
+            'amount': paymentAmount,
+            'currency': paymentCurrency,
+            'topupAmount': selectedBundle?.amount ?? 0.0,
+            'topupCurrency': selectedBundle?.currency ?? 'USD',
+            'paymentAmount': paymentAmount,
+            'paymentCurrency': paymentCurrency,
+            'recipientNumber': phoneNumber ?? '',
+            'operatorName': selectedOperator?.name ?? '',
+            'countryName': country?.name ?? '',
+            'bundleName': selectedBundle?.description ?? selectedBundle?.name ?? '',
+            'timestamp': DateTime.now(),
+          });
         }
+        ref.read(dataWizardProvider.notifier).reset();
       } else {
         setState(() {
           _error = result.message;
@@ -312,18 +471,70 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
     final selectedOperator = wizardState.selectedOperator;
     final country = wizardState.selectedCountry;
     final phoneNumber = wizardState.phoneNumber;
+    final fxRate = selectedOperator?.fx?['rate'] as double?;
+    final fxCurrencyCode = selectedOperator?.fx?['currencyCode'] as String?;
+    final paymentAmount = selectedBundle != null && fxRate != null
+        ? (selectedBundle.amount * fxRate)
+        : selectedBundle?.amount ?? 0.0;
+    final paymentCurrency = fxCurrencyCode ?? country?.currencyCode ?? 'GHS';
+    
+    // Set flag before navigation to prevent redirect to select country
+    setState(() {
+      _isNavigatingToReceipt = true;
+    });
     
     // Navigate to receipt screen with transaction details
     context.go('/payment/receipt', extra: {
       'isSuccess': true,
       'transactionType': 'GLOBALDATATOPUP',
       'transactionId': result.transactionId,
-      'amount': selectedBundle?.amount ?? 0.0,
-      'currency': country?.currencyCode ?? 'GHS',
+      'amount': paymentAmount,
+      'currency': paymentCurrency,
+      'topupAmount': selectedBundle?.amount ?? 0.0,
+      'topupCurrency': selectedBundle?.currency ?? 'USD',
+      'paymentAmount': paymentAmount,
+      'paymentCurrency': paymentCurrency,
       'recipientNumber': phoneNumber ?? '',
       'operatorName': selectedOperator?.name ?? '',
       'countryName': country?.name ?? '',
-      'bundleName': selectedBundle?.name ?? '',
+      'bundleName': selectedBundle?.description ?? selectedBundle?.name ?? '',
+      'timestamp': DateTime.now(),
+    });
+  }
+
+  void _showFailureReceipt(String message, {String? transactionId}) {
+    final wizardState = ref.read(dataWizardProvider);
+    final selectedBundle = wizardState.selectedBundle;
+    final selectedOperator = wizardState.selectedOperator;
+    final country = wizardState.selectedCountry;
+    final phoneNumber = wizardState.phoneNumber;
+    final fxRate = selectedOperator?.fx?['rate'] as double?;
+    final fxCurrencyCode = selectedOperator?.fx?['currencyCode'] as String?;
+    final paymentAmount = selectedBundle != null && fxRate != null
+        ? (selectedBundle.amount * fxRate)
+        : selectedBundle?.amount ?? 0.0;
+    final paymentCurrency = fxCurrencyCode ?? country?.currencyCode ?? 'GHS';
+
+    // Set flag before navigation to prevent redirect to select country
+    setState(() {
+      _isNavigatingToReceipt = true;
+    });
+
+    context.go('/payment/receipt', extra: {
+      'isSuccess': false,
+      'transactionType': 'GLOBALDATATOPUP',
+      'transactionId': transactionId,
+      'amount': paymentAmount,
+      'currency': paymentCurrency,
+      'topupAmount': selectedBundle?.amount ?? 0.0,
+      'topupCurrency': selectedBundle?.currency ?? 'USD',
+      'paymentAmount': paymentAmount,
+      'paymentCurrency': paymentCurrency,
+      'recipientNumber': phoneNumber ?? '',
+      'operatorName': selectedOperator?.name ?? '',
+      'countryName': country?.name ?? '',
+      'bundleName': selectedBundle?.description ?? selectedBundle?.name ?? '',
+      'errorMessage': message,
       'timestamp': DateTime.now(),
     });
   }
@@ -363,6 +574,14 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
     final selectedOperator = wizardState.selectedOperator;
     final selectedBundle = wizardState.selectedBundle;
 
+    // If navigating to receipt, show loading state (check this first)
+    if (_isNavigatingToReceipt) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    
+    // Redirect if missing required data
     if (country == null || phoneNumber == null || selectedOperator == null || selectedBundle == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => context.go('/data/select-country'));
       return const SizedBox.shrink();
@@ -424,17 +643,11 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: _isProcessing ? null : () => context.pop(),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 22),
-            ),
+          AppBackButton(
+            onTap: () => context.pop(),
+            enabled: !_isProcessing,
+            backgroundColor: Colors.white.withOpacity(0.2),
+            iconColor: Colors.white,
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(

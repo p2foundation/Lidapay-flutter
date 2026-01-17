@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:app_links/app_links.dart';
+import 'package:go_router/go_router.dart';
 import 'core/routes/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/localization/app_localizations.dart';
@@ -182,7 +183,13 @@ class _LidapayAppState extends ConsumerState<LidapayApp> {
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
       locale: locale,
-      routerConfig: router,
+      // Use individual router components to filter custom scheme URIs
+      routerDelegate: router.routerDelegate,
+      routeInformationParser: router.routeInformationParser,
+      routeInformationProvider: _SafeRouteInformationProvider(
+        router.routeInformationProvider,
+      ),
+      backButtonDispatcher: router.backButtonDispatcher,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: [
         AppLocalizations.delegate,
@@ -191,5 +198,48 @@ class _LidapayAppState extends ConsumerState<LidapayApp> {
         GlobalCupertinoLocalizations.delegate,
       ],
     );
+  }
+}
+
+/// Custom RouteInformationProvider that filters out custom scheme URIs
+/// This prevents GoRouter from crashing when receiving lidapay:// deep links
+class _SafeRouteInformationProvider extends RouteInformationProvider with ChangeNotifier {
+  final RouteInformationProvider _delegate;
+  RouteInformation _value;
+
+  _SafeRouteInformationProvider(this._delegate) 
+      : _value = _delegate.value {
+    _delegate.addListener(_onDelegateChanged);
+  }
+
+  void _onDelegateChanged() {
+    final newValue = _delegate.value;
+    final uri = newValue.uri;
+    
+    // Filter out custom scheme URIs - they're handled by AppLinks in _handleDeepLink
+    if (uri.scheme.isNotEmpty && uri.scheme != 'http' && uri.scheme != 'https') {
+      AppLogger.info('🛡️ Filtering custom scheme URI from GoRouter: ${uri.scheme}://', 'DeepLink');
+      // Don't update - let the deep link handler manage navigation
+      return;
+    }
+    
+    _value = newValue;
+    notifyListeners();
+  }
+
+  @override
+  RouteInformation get value => _value;
+
+  @override
+  void routerReportsNewRouteInformation(RouteInformation routeInformation, {RouteInformationReportingType type = RouteInformationReportingType.none}) {
+    if (_delegate is GoRouteInformationProvider) {
+      (_delegate as GoRouteInformationProvider).routerReportsNewRouteInformation(routeInformation, type: type);
+    }
+  }
+
+  @override
+  void dispose() {
+    _delegate.removeListener(_onDelegateChanged);
+    super.dispose();
   }
 }

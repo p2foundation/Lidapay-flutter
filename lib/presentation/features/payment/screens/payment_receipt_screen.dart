@@ -16,6 +16,10 @@ class PaymentReceiptScreen extends ConsumerStatefulWidget {
   final String? transactionId;
   final double amount;
   final String currency;
+  final double? topupAmount;
+  final String? topupCurrency;
+  final double? paymentAmount;
+  final String? paymentCurrency;
   final String recipientNumber;
   final String? operatorName;
   final String? countryName;
@@ -30,6 +34,10 @@ class PaymentReceiptScreen extends ConsumerStatefulWidget {
     this.transactionId,
     required this.amount,
     this.currency = 'GHS',
+    this.topupAmount,
+    this.topupCurrency,
+    this.paymentAmount,
+    this.paymentCurrency,
     required this.recipientNumber,
     this.operatorName,
     this.countryName,
@@ -66,6 +74,11 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
     _confettiController.dispose();
     super.dispose();
   }
+
+  double get _displayPaymentAmount => widget.paymentAmount ?? widget.amount;
+  String get _displayPaymentCurrency => widget.paymentCurrency ?? widget.currency;
+  double get _displayTopupAmount => widget.topupAmount ?? widget.amount;
+  String get _displayTopupCurrency => widget.topupCurrency ?? widget.currency;
 
   String get _transactionTypeLabel {
     switch (widget.transactionType.toUpperCase()) {
@@ -129,7 +142,8 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
     final pdf = pw.Document();
     final timestamp = widget.timestamp ?? DateTime.now();
     final dateLabel = DateFormat('dd MMM yyyy - HH:mm').format(timestamp);
-    final amountLabel = '${widget.currency} ${widget.amount.toStringAsFixed(2)}';
+    final amountLabel = '${_displayPaymentCurrency} ${_displayPaymentAmount.toStringAsFixed(2)}';
+    final topupLabel = '${_displayTopupCurrency} ${_displayTopupAmount.toStringAsFixed(2)}';
 
     final primaryColor = PdfColor.fromInt(0xFFEC4899);
     final darkColor = PdfColor.fromInt(0xFF2D2952);
@@ -166,7 +180,8 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
     final details = <MapEntry<String, String>>[
       MapEntry('Transaction Type', _transactionTypeLabel),
       MapEntry('Status', statusLabel),
-      MapEntry('Amount', amountLabel),
+      MapEntry('Payment Amount', amountLabel),
+      MapEntry('Top-up Amount', topupLabel),
       MapEntry('Recipient', widget.recipientNumber),
       MapEntry('Date & Time', dateLabel),
     ];
@@ -553,12 +568,21 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
           
           // Amount
           Text(
-            '${widget.currency} ${widget.amount.toStringAsFixed(2)}',
+            '${_displayPaymentCurrency} ${_displayPaymentAmount.toStringAsFixed(2)}',
             style: Theme.of(context).textTheme.displaySmall?.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
                 ),
           ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.2, end: 0),
+
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Top-up: ${_displayTopupCurrency} ${_displayTopupAmount.toStringAsFixed(2)}',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.white.withOpacity(0.9),
+                  fontWeight: FontWeight.w600,
+                ),
+          ).animate().fadeIn(delay: 320.ms).slideY(begin: 0.2, end: 0),
           
           const SizedBox(height: AppSpacing.sm),
           
@@ -700,10 +724,16 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
                 ],
                 const SizedBox(height: AppSpacing.md),
                 _ReceiptRow(
-                  label: 'Amount',
-                  value: '${widget.currency} ${widget.amount.toStringAsFixed(2)}',
+                  label: 'Payment Amount',
+                  value: '${_displayPaymentCurrency} ${_displayPaymentAmount.toStringAsFixed(2)}',
                   isDark: isDark,
                   isHighlighted: true,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _ReceiptRow(
+                  label: 'Top-up Amount',
+                  value: '${_displayTopupCurrency} ${_displayTopupAmount.toStringAsFixed(2)}',
+                  isDark: isDark,
                 ),
                 if (widget.transactionId != null) ...[
                   const SizedBox(height: AppSpacing.md),

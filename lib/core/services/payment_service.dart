@@ -45,6 +45,7 @@ String _extractErrorMessage(dynamic error) {
 const String _pendingTopupKey = 'pending_topup_params';
 const String _pendingPaymentTokenKey = 'pending_payment_token';
 const String _pendingOrderIdKey = 'pending_order_id';
+const String _paymentDisplayInfoKey = 'payment_display_info';
 
 /// Generates a unique payment reference
 String generatePaymentReference() {
@@ -82,9 +83,43 @@ class PaymentResult {
   });
 }
 
+class PaymentDisplayInfo {
+  final double topupAmount;
+  final String topupCurrency;
+  final double paymentAmount;
+  final String paymentCurrency;
+
+  PaymentDisplayInfo({
+    required this.topupAmount,
+    required this.topupCurrency,
+    required this.paymentAmount,
+    required this.paymentCurrency,
+  });
+
+  factory PaymentDisplayInfo.fromJson(Map<String, dynamic> json) {
+    return PaymentDisplayInfo(
+      topupAmount: (json['topupAmount'] as num?)?.toDouble() ?? 0.0,
+      topupCurrency: json['topupCurrency'] as String? ?? 'USD',
+      paymentAmount: (json['paymentAmount'] as num?)?.toDouble() ?? 0.0,
+      paymentCurrency: json['paymentCurrency'] as String? ?? 'GHS',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'topupAmount': topupAmount,
+        'topupCurrency': topupCurrency,
+        'paymentAmount': paymentAmount,
+        'paymentCurrency': paymentCurrency,
+      };
+}
+
 /// Payment service provider
 final paymentServiceProvider = Provider<PaymentService>((ref) {
   return PaymentService(ref);
+});
+
+final paymentDisplayInfoProvider = FutureProvider<Map<String, PaymentDisplayInfo>>((ref) {
+  return ref.read(paymentServiceProvider).getPaymentDisplayInfoMap();
 });
 
 /// Pending payment state provider
@@ -149,6 +184,54 @@ class PaymentService {
     await prefs.remove(_pendingOrderIdKey);
     _ref.read(pendingPaymentProvider.notifier).state = null;
     AppLogger.info('🧹 Cleared pending payment data', 'PaymentService');
+  }
+
+  Future<void> storePaymentDisplayInfo(
+    String? reference, {
+    required double topupAmount,
+    required String topupCurrency,
+    required double paymentAmount,
+    required String paymentCurrency,
+  }) async {
+    if (reference == null || reference.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_paymentDisplayInfoKey);
+    Map<String, dynamic> store = {};
+    if (raw != null) {
+      try {
+        store = jsonDecode(raw) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+    store[reference] = PaymentDisplayInfo(
+      topupAmount: topupAmount,
+      topupCurrency: topupCurrency,
+      paymentAmount: paymentAmount,
+      paymentCurrency: paymentCurrency,
+    ).toJson();
+    await prefs.setString(_paymentDisplayInfoKey, jsonEncode(store));
+  }
+
+  Future<Map<String, PaymentDisplayInfo>> getPaymentDisplayInfoMap() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_paymentDisplayInfoKey);
+    if (raw == null) return {};
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      return decoded.map(
+        (key, value) => MapEntry(
+          key,
+          PaymentDisplayInfo.fromJson(value as Map<String, dynamic>),
+        ),
+      );
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<PaymentDisplayInfo?> getPaymentDisplayInfo(String? reference) async {
+    if (reference == null || reference.isEmpty) return null;
+    final map = await getPaymentDisplayInfoMap();
+    return map[reference];
   }
 
   /// Initiate payment with AdvansiPay and open checkout URL
@@ -251,50 +334,83 @@ class PaymentService {
   }) async {
     _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.crediting;
 
-    try {
-      AppLogger.info('📱 Crediting airtime for ${params.recipientNumber}', 'PaymentService');
+    const maxAttempts = 3;
 
-      final response = await _apiClient.rechargeAirtime(
-        AirtimeRechargeRequest(
-          userId: userId,
-          operatorId: params.operatorId,
-          amount: params.amount,
-          customIdentifier: params.customIdentifier ?? 'reloadly-airtime ${DateTime.now().millisecondsSinceEpoch}',
-          recipientEmail: params.recipientEmail,
-          recipientNumber: params.recipientNumber,
-          recipientCountryCode: params.recipientCountryCode,
-          senderNumber: params.senderNumber,
-          senderCountryCode: params.senderCountryCode,
-        ),
-      );
-
-      // Check if status is SUCCESSFUL (not using .success field as it doesn't exist)
-      if (response.status.toUpperCase() == 'SUCCESSFUL') {
-        await clearPendingPayment();
-        _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.success;
-        return PaymentResult(
-          success: true,
-          message: 'Airtime top-up successful.',
-          data: response,
-          transactionId: response.transactionId.toString(),
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final customIdentifier =
+            (params.customIdentifier?.isNotEmpty ?? false) ? params.customIdentifier! : params.payTransRef;
+        AppLogger.info(
+          '📱 Crediting airtime for ${params.recipientNumber} (attempt $attempt/$maxAttempts)',
+          'PaymentService',
         );
-      } else {
+
+        final response = await _apiClient.rechargeAirtime(
+          AirtimeRechargeRequest(
+            userId: userId,
+            operatorId: params.operatorId,
+            amount: params.amount,
+            customIdentifier: customIdentifier,
+            recipientEmail: params.recipientEmail,
+            recipientNumber: params.recipientNumber,
+            recipientCountryCode: params.recipientCountryCode,
+            senderNumber: params.senderNumber,
+            senderCountryCode: params.senderCountryCode,
+          ),
+        );
+
+        final status = response.status.toUpperCase();
+
+        // Check if status is SUCCESSFUL (not using .success field as it doesn't exist)
+        if (status == 'SUCCESSFUL') {
+          await clearPendingPayment();
+          _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.success;
+          return PaymentResult(
+            success: true,
+            message: 'Airtime top-up successful.',
+            data: response,
+            transactionId: response.transactionId.toString(),
+          );
+        }
+
+        if ((status == 'PENDING' || status == 'PROCESSING') && attempt < maxAttempts) {
+          await Future.delayed(const Duration(seconds: 4));
+          continue;
+        }
+
         _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
         return PaymentResult(
           success: false,
           message: 'Airtime top-up failed. Please check your balance or try again.',
           errorCode: 'CREDIT_FAILED',
         );
+      } catch (e) {
+        final rawMessage = _extractErrorMessage(e);
+        final shouldRetry = attempt < maxAttempts && _isRetryableTopupError(rawMessage);
+        if (shouldRetry) {
+          AppLogger.warning(
+            '⏳ Airtime crediting retry $attempt/$maxAttempts: $rawMessage',
+            'PaymentService',
+          );
+          await Future.delayed(const Duration(seconds: 4));
+          continue;
+        }
+        AppLogger.error('Airtime crediting failed', e, null, 'PaymentService');
+        _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
+        return PaymentResult(
+          success: false,
+          message: _sanitizeTopupMessage(rawMessage),
+          errorCode: 'EXCEPTION',
+        );
       }
-    } catch (e) {
-      AppLogger.error('Airtime crediting failed', e, null, 'PaymentService');
-      _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
-      return PaymentResult(
-        success: false,
-        message: _sanitizeTopupMessage(_extractErrorMessage(e)),
-        errorCode: 'EXCEPTION',
-      );
     }
+
+    _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
+    return PaymentResult(
+      success: false,
+      message: _sanitizeTopupMessage('Top-up failed. Please try again later.'),
+      errorCode: 'MAX_RETRIES_EXCEEDED',
+    );
   }
 
   /// Credit data bundle after successful payment
@@ -304,52 +420,85 @@ class PaymentService {
   }) async {
     _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.crediting;
 
-    try {
-      AppLogger.info('📶 Crediting data for ${params.recipientNumber}', 'PaymentService');
+    const maxAttempts = 3;
 
-      final response = await _apiClient.buyData(
-        DataPurchaseRequest(
-          userId: userId,
-          operatorId: params.operatorId,
-          recipientNumber: params.recipientNumber,
-          recipientCountryCode: params.recipientCountryCode,
-          senderNumber: params.senderNumber,
-          senderCountryCode: params.senderCountryCode,
-          recipientEmail: params.recipientEmail,
-          customIdentifier: params.customIdentifier ?? 'reloadly-data ${DateTime.now().millisecondsSinceEpoch}',
-          bundleId: params.bundleId ?? 0,
-          amount: params.amount,
-          userName: params.senderNumber, // Required by API - user's phone number
-        ),
-      );
-
-      // Check if status is SUCCESSFUL (not using .success field as it doesn't exist)
-      if (response.status.toUpperCase() == 'SUCCESSFUL') {
-        await clearPendingPayment();
-        _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.success;
-        return PaymentResult(
-          success: true,
-          message: 'Data bundle purchase successful.',
-          data: response,
-          transactionId: response.transactionId.toString(),
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final customIdentifier =
+            (params.customIdentifier?.isNotEmpty ?? false) ? params.customIdentifier! : params.payTransRef;
+        AppLogger.info(
+          '📶 Crediting data for ${params.recipientNumber} (attempt $attempt/$maxAttempts)',
+          'PaymentService',
         );
-      } else {
+
+        final response = await _apiClient.buyData(
+          DataPurchaseRequest(
+            userId: userId,
+            operatorId: params.operatorId,
+            recipientNumber: params.recipientNumber,
+            recipientCountryCode: params.recipientCountryCode,
+            senderNumber: params.senderNumber,
+            senderCountryCode: params.senderCountryCode,
+            recipientEmail: params.recipientEmail,
+            customIdentifier: customIdentifier,
+            bundleId: params.bundleId ?? 0,
+            amount: params.amount,
+            userName: params.senderNumber, // Required by API - user's phone number
+          ),
+        );
+
+        final status = response.status.toUpperCase();
+
+        // Check if status is SUCCESSFUL (not using .success field as it doesn't exist)
+        if (status == 'SUCCESSFUL') {
+          await clearPendingPayment();
+          _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.success;
+          return PaymentResult(
+            success: true,
+            message: 'Data bundle purchase successful.',
+            data: response,
+            transactionId: response.transactionId.toString(),
+          );
+        }
+
+        if ((status == 'PENDING' || status == 'PROCESSING') && attempt < maxAttempts) {
+          await Future.delayed(const Duration(seconds: 4));
+          continue;
+        }
+
         _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
         return PaymentResult(
           success: false,
           message: 'Data bundle purchase failed. Please check your balance or try again.',
           errorCode: 'CREDIT_FAILED',
         );
+      } catch (e) {
+        final rawMessage = _extractErrorMessage(e);
+        final shouldRetry = attempt < maxAttempts && _isRetryableTopupError(rawMessage);
+        if (shouldRetry) {
+          AppLogger.warning(
+            '⏳ Data crediting retry $attempt/$maxAttempts: $rawMessage',
+            'PaymentService',
+          );
+          await Future.delayed(const Duration(seconds: 4));
+          continue;
+        }
+        AppLogger.error('Data crediting failed', e, null, 'PaymentService');
+        _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
+        return PaymentResult(
+          success: false,
+          message: _sanitizeTopupMessage(rawMessage),
+          errorCode: 'EXCEPTION',
+        );
       }
-    } catch (e) {
-      AppLogger.error('Data crediting failed', e, null, 'PaymentService');
-      _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
-      return PaymentResult(
-        success: false,
-        message: _sanitizeTopupMessage(_extractErrorMessage(e)),
-        errorCode: 'EXCEPTION',
-      );
     }
+
+    _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
+    return PaymentResult(
+      success: false,
+      message: _sanitizeTopupMessage('Top-up failed. Please try again later.'),
+      errorCode: 'MAX_RETRIES_EXCEEDED',
+    );
   }
 
   /// Query payment transaction status using token with retry support
@@ -364,7 +513,8 @@ class PaymentService {
     
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        AppLogger.info('🔍 Querying payment status (attempt $attempt/$maxRetries) with token: ${token.substring(0, 10)}...', 'PaymentService');
+        final safeToken = token.length > 10 ? token.substring(0, 10) : token;
+        AppLogger.info('🔍 Querying payment status (attempt $attempt/$maxRetries) with token: $safeToken...', 'PaymentService');
         
         final response = await _apiClient.queryAdvansiPayTransaction(
           AdvansiPayQueryRequest(token: token),
@@ -374,14 +524,24 @@ class PaymentService {
         if ((response.status == 200 || response.status == 201) && response.data != null) {
           final paymentStatus = response.data!.status?.toUpperCase() ?? 'UNKNOWN';
           final resultText = response.data!.resultText?.toLowerCase() ?? '';
+          final originalResultText = response.data!.originalResponse?.resultText?.toLowerCase() ?? '';
+          final originalResult = response.data!.originalResponse?.result;
+          final hasSuccessText = (resultText.contains('success') && !resultText.contains('unsuccess')) ||
+              (originalResultText.contains('success') && !originalResultText.contains('unsuccess'));
           
-          AppLogger.info('✅ Payment query result: status=$paymentStatus, resultText=$resultText', 'PaymentService');
+          AppLogger.info(
+            '✅ Payment query result: status=$paymentStatus, resultText=$resultText, originalResultText=$originalResultText, result=$originalResult',
+            'PaymentService',
+          );
           
           // Check for COMPLETED status or Success resultText
-          final isSuccess = paymentStatus == 'COMPLETED' || 
-                            paymentStatus == 'APPROVED' || 
-                            paymentStatus == 'SUCCESS' ||
-                            resultText == 'success';
+          final isSuccess = paymentStatus == 'COMPLETED' ||
+              paymentStatus == 'APPROVED' ||
+              paymentStatus == 'SUCCESS' ||
+              paymentStatus == 'SUCCESSFUL' ||
+              paymentStatus == 'PAID' ||
+              hasSuccessText ||
+              originalResult == 1;
           
           if (isSuccess) {
             // Payment confirmed - return immediately
@@ -636,6 +796,12 @@ class PaymentService {
   String _sanitizeTopupMessage(String message) {
     final cleaned = message.replaceAll('Exception: ', '').trim();
     final lower = cleaned.toLowerCase();
+    if (lower.contains('try again later') || lower.contains('asynchronous top-up failed')) {
+      return cleaned;
+    }
+    if (lower.contains('processing') || lower.contains('pending')) {
+      return 'Top-up is still processing. Please try again shortly.';
+    }
     if (lower.contains('insufficient') && lower.contains('fund')) {
       return 'Top-up failed due to insufficient wallet balance. Please fund your wallet and try again.';
     }
@@ -649,6 +815,14 @@ class PaymentService {
       return 'Top-up failed. Please try again.';
     }
     return cleaned;
+  }
+
+  bool _isRetryableTopupError(String message) {
+    final lower = message.toLowerCase();
+    return lower.contains('try again later') ||
+        lower.contains('asynchronous top-up failed') ||
+        lower.contains('temporarily unavailable') ||
+        lower.contains('timeout');
   }
 }
 

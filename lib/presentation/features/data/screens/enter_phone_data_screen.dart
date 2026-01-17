@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../../data/models/api_models.dart';
 import '../../../providers/data_wizard_provider.dart';
 import '../../../providers/auth_provider.dart'; // Contains apiClientProvider
@@ -155,12 +156,35 @@ class _EnterPhoneDataScreenState extends ConsumerState<EnterPhoneDataScreen> {
 
       // Parse the raw list response
       final allOperators = <DataOperator>[];
+      final operatorMetadata = <int, Map<String, dynamic>>{};
       if (rawResponse is List) {
         for (var item in rawResponse) {
           try {
             if (item is Map<String, dynamic>) {
-              final operator = DataOperator.fromJson(item);
+              var operator = DataOperator.fromJson(item);
+              final logoUrl = operator.logoUrl;
+              if (logoUrl == null || logoUrl.isEmpty) {
+                String? resolvedLogo;
+                final directLogo = item['logoUrl'] ?? item['logo'];
+                if (directLogo is String && directLogo.isNotEmpty) {
+                  resolvedLogo = directLogo;
+                } else if (item['logoUrls'] is Map) {
+                  final logoMap = Map<String, dynamic>.from(item['logoUrls'] as Map);
+                  resolvedLogo = (logoMap['3'] ?? logoMap['2'] ?? logoMap['1']) as String?;
+                } else if (item['logoUrls'] is List) {
+                  final logoList = (item['logoUrls'] as List)
+                      .whereType<String>()
+                      .toList();
+                  if (logoList.isNotEmpty) {
+                    resolvedLogo = logoList.last;
+                  }
+                }
+                if (resolvedLogo != null && resolvedLogo.isNotEmpty) {
+                  operator = operator.copyWith(logoUrl: resolvedLogo);
+                }
+              }
               allOperators.add(operator);
+              operatorMetadata[operator.operatorId] = Map<String, dynamic>.from(item);
             }
           } catch (e) {
             print('⚠️ Failed to parse operator: $e');
@@ -206,7 +230,17 @@ class _EnterPhoneDataScreenState extends ConsumerState<EnterPhoneDataScreen> {
         _isLoadingOperators = false;
       });
       
-      ref.read(dataWizardProvider.notifier).setAvailableOperators(filteredOperators);
+      final filteredMetadata = <int, Map<String, dynamic>>{};
+      for (final op in filteredOperators) {
+        final metadata = operatorMetadata[op.operatorId];
+        if (metadata != null) {
+          filteredMetadata[op.operatorId] = metadata;
+        }
+      }
+
+      ref.read(dataWizardProvider.notifier)
+        ..setAvailableOperators(filteredOperators)
+        ..setOperatorMetadata(filteredMetadata);
     } catch (e) {
       print('❌ Failed to load operators: $e');
       setState(() {
@@ -313,17 +347,10 @@ class _EnterPhoneDataScreenState extends ConsumerState<EnterPhoneDataScreen> {
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
-          GestureDetector(
+          AppBackButton(
             onTap: () => context.pop(),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 22),
-            ),
+            backgroundColor: Colors.white.withOpacity(0.2),
+            iconColor: Colors.white,
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(

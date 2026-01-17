@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../../data/models/api_models.dart';
 import '../../../providers/data_wizard_provider.dart';
 import '../../../../core/widgets/custom_bottom_nav.dart';
@@ -59,83 +60,64 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
     }
   }
 
-  List<DataBundle> _generateBundles(DataOperator operator) {
-    // Generate sample bundles based on operator
-    // In production, these would come from an API endpoint
-    return [
-      DataBundle(
-        id: 1,
-        name: '${operator.name} Data',
-        description: '500MB Daily Plan',
-        amount: 0.26,
-        currency: 'USD',
-        validity: '1 day',
-        dataAmount: 0.5,
-      ),
-      DataBundle(
-        id: 2,
-        name: '${operator.name} Bundles',
-        description: 'Get 600MB + 2mins + 2 SMS, valid for 7 days',
-        amount: 0.37,
-        currency: 'USD',
-        validity: '7 days',
-        dataAmount: 0.6,
-      ),
-      DataBundle(
-        id: 3,
-        name: '${operator.name} Data',
-        description: 'Get 1.8GB + 6mins + 5 SMS, valid for 7 days',
-        amount: 1.11,
-        currency: 'USD',
-        validity: '7 days',
-        dataAmount: 1.8,
-      ),
-      DataBundle(
-        id: 4,
-        name: '${operator.name} Data',
-        description: '2GB Monthly Plan',
-        amount: 2.50,
-        currency: 'USD',
-        validity: '30 days',
-        dataAmount: 2.0,
-      ),
-      DataBundle(
-        id: 5,
-        name: '${operator.name} Data',
-        description: '5GB Monthly Plan',
-        amount: 5.00,
-        currency: 'USD',
-        validity: '30 days',
-        dataAmount: 5.0,
-      ),
-      DataBundle(
-        id: 6,
-        name: '${operator.name} Data',
-        description: '10GB Monthly Plan',
-        amount: 8.00,
-        currency: 'USD',
-        validity: '30 days',
-        dataAmount: 10.0,
-      ),
-      DataBundle(
-        id: 7,
-        name: '${operator.name} Data',
-        description: '20GB Monthly Plan',
-        amount: 15.00,
-        currency: 'USD',
-        validity: '30 days',
-        dataAmount: 20.0,
-      ),
-      DataBundle(
-        id: 8,
-        name: '${operator.name} Data',
-        description: '50GB Monthly Plan',
-        amount: 30.00,
-        currency: 'USD',
-        validity: '30 days',
-        dataAmount: 50.0,
-      ),
-    ];
+  List<DataBundle> _generateBundles(
+    DataOperator operator,
+    Map<int, Map<String, dynamic>>? operatorMetadata,
+  ) {
+    final metadata = operatorMetadata?[operator.operatorId];
+    if (metadata == null) {
+      return [];
+    }
+
+    final fixedAmounts = (metadata['fixedAmounts'] as List?)
+            ?.map((value) => (value as num).toDouble())
+            .toList() ??
+        <double>[];
+    final localFixedAmounts = (metadata['localFixedAmounts'] as List?)
+            ?.map((value) => (value as num).toDouble())
+            .toList() ??
+        <double>[];
+
+    final descriptions = (metadata['fixedAmountsDescriptions'] as Map?)
+            ?.map((key, value) => MapEntry(key.toString(), value.toString())) ??
+        <String, String>{};
+    final localDescriptions = (metadata['localFixedAmountsDescriptions'] as Map?)
+            ?.map((key, value) => MapEntry(key.toString(), value.toString())) ??
+        <String, String>{};
+
+    final useFixed = fixedAmounts.isNotEmpty;
+    final amounts = useFixed ? fixedAmounts : localFixedAmounts;
+    final currency = useFixed
+        ? (metadata['senderCurrencyCode'] as String? ?? 'USD')
+        : (metadata['destinationCurrencyCode'] as String? ?? 'GHS');
+    final amountDescriptions = useFixed ? descriptions : localDescriptions;
+
+    String _resolveDescription(double amount) {
+      final keyExact = amount.toStringAsFixed(2);
+      if (amountDescriptions.containsKey(keyExact)) {
+        return amountDescriptions[keyExact]!;
+      }
+      for (final entry in amountDescriptions.entries) {
+        final parsed = double.tryParse(entry.key);
+        if (parsed != null && (parsed - amount).abs() < 0.001) {
+          return entry.value;
+        }
+      }
+      return 'Data bundle';
+    }
+
+    return List.generate(amounts.length, (index) {
+      final amount = amounts[index];
+      final description = _resolveDescription(amount);
+      return DataBundle(
+        id: index + 1,
+        name: operator.name,
+        description: description,
+        amount: amount,
+        currency: currency,
+        metadata: metadata,
+      );
+    });
   }
   
   List<DataBundle> _getDisplayBundles(List<DataBundle> allBundles) {
@@ -165,7 +147,9 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
       ),
     );
 
-    final bundles = _selectedOperator != null ? _generateBundles(_selectedOperator!) : <DataBundle>[];
+    final bundles = _selectedOperator != null
+        ? _generateBundles(_selectedOperator!, wizardState.operatorMetadata)
+        : <DataBundle>[];
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -221,17 +205,10 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
-          GestureDetector(
+          AppBackButton(
             onTap: () => context.pop(),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 22),
-            ),
+            backgroundColor: Colors.white.withOpacity(0.2),
+            iconColor: Colors.white,
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
@@ -364,7 +341,24 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
                       color: AppColors.primary.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(AppRadius.md),
                     ),
-                    child: Icon(Icons.wifi_rounded, color: AppColors.primary, size: 24),
+                    child: operator.logoUrl != null && operator.logoUrl!.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            child: Image.network(
+                              operator.logoUrl!,
+                              width: 48,
+                              height: 48,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Icon(
+                                  Icons.wifi_rounded,
+                                  color: AppColors.primary,
+                                  size: 24,
+                                );
+                              },
+                            ),
+                          )
+                        : Icon(Icons.wifi_rounded, color: AppColors.primary, size: 24),
                   ),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(

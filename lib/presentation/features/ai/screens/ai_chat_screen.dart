@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/widgets/custom_bottom_nav.dart';
 
 class AiChatScreen extends ConsumerStatefulWidget {
@@ -199,21 +200,12 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       ),
       child: Row(
         children: [
-          GestureDetector(
+          AppBackButton(
             onTap: () => context.pop(),
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.darkCard : AppColors.lightBg,
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: Icon(
-                Icons.arrow_back_rounded,
-                color: isDark ? AppColors.darkText : AppColors.lightText,
-                size: 20,
-              ),
-            ),
+            size: 40,
+            iconSize: 20,
+            backgroundColor: isDark ? AppColors.darkCard : AppColors.lightBg,
+            iconColor: isDark ? AppColors.darkText : AppColors.lightText,
           ),
           const SizedBox(width: AppSpacing.md),
           Container(

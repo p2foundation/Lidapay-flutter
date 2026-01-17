@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../../data/models/api_models.dart';
 import '../../../providers/airtime_wizard_provider.dart';
 import '../../../../core/widgets/custom_bottom_nav.dart';
@@ -96,8 +97,9 @@ class _SelectAmountScreenState extends ConsumerState<SelectAmountScreen> {
     final operatorData = wizardState.operatorData;
     
     if (operatorData != null) {
-      final minAmount = operatorData.localMinAmount ?? operatorData.minAmount;
-      final maxAmount = operatorData.localMaxAmount ?? operatorData.maxAmount;
+      final minAmount = operatorData.minAmount;
+      final maxAmount = operatorData.maxAmount;
+      final senderSymbol = operatorData.senderCurrencySymbol;
       
       if (amount >= minAmount && amount <= maxAmount) {
         setState(() {
@@ -109,7 +111,7 @@ class _SelectAmountScreenState extends ConsumerState<SelectAmountScreen> {
         // Show error message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Amount must be between ${operatorData.destinationCurrencySymbol}${minAmount.toStringAsFixed(0)} and ${operatorData.destinationCurrencySymbol}${maxAmount.toStringAsFixed(0)}'),
+            content: Text('Amount must be between $senderSymbol${minAmount.toStringAsFixed(0)} and $senderSymbol${maxAmount.toStringAsFixed(0)}'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -129,8 +131,9 @@ class _SelectAmountScreenState extends ConsumerState<SelectAmountScreen> {
     final operatorData = wizardState.operatorData;
     
     if (amount != null && amount > 0 && operatorData != null) {
-      final minAmount = operatorData.localMinAmount ?? operatorData.minAmount;
-      final maxAmount = operatorData.localMaxAmount ?? operatorData.maxAmount;
+      final minAmount = operatorData.minAmount;
+      final maxAmount = operatorData.maxAmount;
+      final senderSymbol = operatorData.senderCurrencySymbol;
       
       if (amount >= minAmount && amount <= maxAmount) {
         context.push('/airtime/confirm-airtime');
@@ -138,7 +141,7 @@ class _SelectAmountScreenState extends ConsumerState<SelectAmountScreen> {
         // Show error message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Amount must be between ${operatorData.destinationCurrencySymbol}${minAmount.toStringAsFixed(0)} and ${operatorData.destinationCurrencySymbol}${maxAmount.toStringAsFixed(0)}'),
+            content: Text('Amount must be between $senderSymbol${minAmount.toStringAsFixed(0)} and $senderSymbol${maxAmount.toStringAsFixed(0)}'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -168,9 +171,9 @@ class _SelectAmountScreenState extends ConsumerState<SelectAmountScreen> {
     final quickAmounts = _getSuggestedAmounts(operatorData);
     final amount = double.tryParse(_amountController.text);
     
-    // Use suggestedAmounts min/max if available, otherwise fall back to operator limits
-    final minAmount = quickAmounts.isNotEmpty ? quickAmounts.first : (operatorData.localMinAmount ?? operatorData.minAmount);
-    final maxAmount = quickAmounts.isNotEmpty ? quickAmounts.last : (operatorData.localMaxAmount ?? operatorData.maxAmount);
+    // Use suggestedAmounts min/max (sender currency) if available, otherwise fall back to operator limits
+    final minAmount = quickAmounts.isNotEmpty ? quickAmounts.first : operatorData.minAmount;
+    final maxAmount = quickAmounts.isNotEmpty ? quickAmounts.last : operatorData.maxAmount;
     
     final canContinue = amount != null && amount >= minAmount && amount <= maxAmount;
 
@@ -219,17 +222,10 @@ class _SelectAmountScreenState extends ConsumerState<SelectAmountScreen> {
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
-          GestureDetector(
+          AppBackButton(
             onTap: () => context.pop(),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 22),
-            ),
+            backgroundColor: Colors.white.withOpacity(0.2),
+            iconColor: Colors.white,
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
@@ -324,6 +320,7 @@ class _SelectAmountScreenState extends ConsumerState<SelectAmountScreen> {
 
   Widget _buildAmountInput(BuildContext context, AutodetectData operatorData, double minAmount, double maxAmount, double? amount) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final senderSymbol = operatorData.senderCurrencySymbol;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -362,7 +359,7 @@ class _SelectAmountScreenState extends ConsumerState<SelectAmountScreen> {
               hintStyle: TextStyle(
                 color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
               ),
-              prefixText: '${operatorData.destinationCurrencySymbol} ',
+              prefixText: '$senderSymbol ',
               prefixStyle: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
                   ),
@@ -376,7 +373,7 @@ class _SelectAmountScreenState extends ConsumerState<SelectAmountScreen> {
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Min: ${operatorData.destinationCurrencySymbol}${minAmount.toStringAsFixed(0)} • Max: ${operatorData.destinationCurrencySymbol}${maxAmount.toStringAsFixed(0)}',
+            'Min: $senderSymbol${minAmount.toStringAsFixed(0)} • Max: $senderSymbol${maxAmount.toStringAsFixed(0)}',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
                 ),
@@ -407,7 +404,7 @@ class _SelectAmountScreenState extends ConsumerState<SelectAmountScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final displayAmounts = _getDisplayAmounts(allAmounts);
     final hasMoreAmounts = allAmounts.length > _initialAmountCount;
-    final currencyCode = operatorData.destinationCurrencyCode;
+    final currencyCode = operatorData.senderCurrencyCode;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

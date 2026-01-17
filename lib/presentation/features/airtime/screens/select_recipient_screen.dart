@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_back_button.dart';
 
 class SelectRecipientScreen extends StatefulWidget {
   const SelectRecipientScreen({super.key});
@@ -89,18 +90,10 @@ class _SelectRecipientScreenState extends State<SelectRecipientScreen> {
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
-          GestureDetector(
+          AppBackButton(
             onTap: () => context.pop(),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                borderRadius: BorderRadius.circular(AppRadius.md),
-                boxShadow: AppShadows.xs,
-              ),
-              child: const Icon(Icons.arrow_back_rounded, size: 22),
-            ),
+            backgroundColor: colorScheme.surface,
+            boxShadow: AppShadows.xs,
           ),
           const SizedBox(width: AppSpacing.md),
           Text(

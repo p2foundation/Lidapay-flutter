@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/services/payment_service.dart';
 import '../../../../data/models/api_models.dart';
 import '../../../../presentation/providers/auth_provider.dart';
@@ -174,17 +175,11 @@ class _ConfirmTransactionScreenState extends ConsumerState<ConfirmTransactionScr
             children: [
               Row(
                 children: [
-                  GestureDetector(
+                  AppBackButton(
                     onTap: () => context.pop(),
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(AppRadius.md),
-                      ),
-                      child: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                    ),
+                    size: 40,
+                    backgroundColor: Colors.white.withOpacity(0.2),
+                    iconColor: Colors.white,
                   ),
                   const SizedBox(width: AppSpacing.md),
                   Text(

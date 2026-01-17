@@ -9,6 +9,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/services/payment_service.dart';
 import '../../../../data/models/api_models.dart';
 import '../../../providers/transaction_provider.dart';
@@ -29,6 +30,7 @@ class _TransactionDetailScreenState extends ConsumerState<TransactionDetailScree
   late Transaction _transaction;
   bool _isVerifying = false;
   bool _isExporting = false;
+  Map<String, PaymentDisplayInfo> _paymentDisplayInfo = {};
 
   @override
   void initState() {
@@ -40,6 +42,21 @@ class _TransactionDetailScreenState extends ConsumerState<TransactionDetailScree
         statusBarIconBrightness: Brightness.light,
       ),
     );
+    _loadPaymentDisplayInfo();
+  }
+
+  Future<void> _loadPaymentDisplayInfo() async {
+    final info = await ref.read(paymentServiceProvider).getPaymentDisplayInfoMap();
+    if (mounted) {
+      setState(() {
+        _paymentDisplayInfo = info;
+      });
+    }
+  }
+
+  PaymentDisplayInfo? _resolvePaymentDisplayInfo(Transaction transaction) {
+    final reference = transaction.transId ?? transaction.id;
+    return _paymentDisplayInfo[reference];
   }
 
   bool _isPendingStatus(String status) {
@@ -160,7 +177,15 @@ class _TransactionDetailScreenState extends ConsumerState<TransactionDetailScree
     final pdf = pw.Document();
     final status = _normalizeStatus(transaction.status);
     final dateLabel = DateFormat('MMM dd, yyyy • hh:mm a').format(transaction.createdAt);
-    final amountLabel = '${transaction.currency} ${transaction.amount.abs().toStringAsFixed(2)}';
+    final displayInfo = _resolvePaymentDisplayInfo(transaction);
+    final paymentAmount = displayInfo?.paymentAmount ?? transaction.amount.abs();
+    final paymentCurrency = displayInfo?.paymentCurrency ?? transaction.currency;
+    final topupAmount = displayInfo?.topupAmount;
+    final topupCurrency = displayInfo?.topupCurrency;
+    final amountLabel = '$paymentCurrency ${paymentAmount.toStringAsFixed(2)}';
+    final topupLabel = (topupAmount != null && topupCurrency != null)
+        ? '$topupCurrency ${topupAmount.toStringAsFixed(2)}'
+        : null;
     final transactionTypeLabel = _formatTransactionType(transaction);
     final directionLabel = transaction.amount < 0 ? 'Sent' : 'Received';
     final networkLabel = _resolveNetworkLabel(transaction);
@@ -216,9 +241,12 @@ class _TransactionDetailScreenState extends ConsumerState<TransactionDetailScree
       MapEntry('Transaction Type', transactionTypeLabel),
       MapEntry('Status', status.toUpperCase()),
       MapEntry('Direction', directionLabel),
-      MapEntry('Amount', amountLabel),
+      MapEntry('Payment Amount', amountLabel),
       MapEntry('Date & Time', dateLabel),
     ];
+    if (topupLabel != null) {
+      details.insert(4, MapEntry('Top-up Amount', topupLabel));
+    }
 
     final recipientName = transaction.recipientName?.trim();
     if (recipientName?.isNotEmpty ?? false) {
@@ -553,9 +581,10 @@ class _TransactionDetailScreenState extends ConsumerState<TransactionDetailScree
             children: [
               Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                    onPressed: () => context.pop(),
+                  AppBackButton(
+                    onTap: () => context.pop(),
+                    backgroundColor: Colors.white.withOpacity(0.2),
+                    iconColor: Colors.white,
                   ),
                   Expanded(
                     child: Text(
@@ -661,6 +690,11 @@ class _TransactionDetailScreenState extends ConsumerState<TransactionDetailScree
   }
 
   Widget _buildAmountCard(BuildContext context, Transaction transaction, bool isExpense) {
+    final displayInfo = _resolvePaymentDisplayInfo(transaction);
+    final paymentAmount = displayInfo?.paymentAmount ?? transaction.amount.abs();
+    final paymentCurrency = displayInfo?.paymentCurrency ?? transaction.currency;
+    final topupAmount = displayInfo?.topupAmount;
+    final topupCurrency = displayInfo?.topupCurrency;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
@@ -678,12 +712,22 @@ class _TransactionDetailScreenState extends ConsumerState<TransactionDetailScree
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            '${isExpense ? '-' : '+'}${transaction.currency} ${transaction.amount.abs().toStringAsFixed(2)}',
+            '${isExpense ? '-' : '+'}$paymentCurrency ${paymentAmount.toStringAsFixed(2)}',
             style: Theme.of(context).textTheme.displaySmall?.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
                 ),
           ),
+          if (topupAmount != null && topupCurrency != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Top-up: $topupCurrency ${topupAmount.toStringAsFixed(2)}',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white.withOpacity(0.9),
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ],
         ],
       ),
     ).animate().fadeIn(delay: 200.ms);
@@ -831,6 +875,11 @@ class _TransactionDetailScreenState extends ConsumerState<TransactionDetailScree
 
   Widget _buildDetailsSection(BuildContext context, Transaction transaction, bool isExpense) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final displayInfo = _resolvePaymentDisplayInfo(transaction);
+    final topupAmount = displayInfo?.topupAmount;
+    final topupCurrency = displayInfo?.topupCurrency;
+    final paymentAmount = displayInfo?.paymentAmount;
+    final paymentCurrency = displayInfo?.paymentCurrency;
     final details = <Widget>[
       _DetailRow(
         label: 'Transaction Type',
@@ -841,6 +890,23 @@ class _TransactionDetailScreenState extends ConsumerState<TransactionDetailScree
         value: isExpense ? 'Sent' : 'Received',
       ),
     ];
+
+    if (paymentAmount != null && paymentCurrency != null) {
+      details.add(
+        _DetailRow(
+          label: 'Payment Amount',
+          value: '$paymentCurrency ${paymentAmount.toStringAsFixed(2)}',
+        ),
+      );
+    }
+    if (topupAmount != null && topupCurrency != null) {
+      details.add(
+        _DetailRow(
+          label: 'Top-up Amount',
+          value: '$topupCurrency ${topupAmount.toStringAsFixed(2)}',
+        ),
+      );
+    }
 
     if (transaction.recipientName?.trim().isNotEmpty ?? false) {
       details.add(
