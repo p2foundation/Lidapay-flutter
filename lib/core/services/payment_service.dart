@@ -134,6 +134,11 @@ class PaymentService {
   PaymentService(this._ref);
 
   ApiClient get _apiClient => _ref.read(apiClientProvider);
+  
+  ApiClient get _prymoApiClient {
+    final dio = DioClient.createPrymoDio();
+    return ApiClient.prymoCredit(dio);
+  }
 
   /// Store topup params for after-payment crediting
   Future<void> storePendingTopup(TopupParams params) async {
@@ -336,6 +341,11 @@ class PaymentService {
 
     const maxAttempts = 3;
 
+    // Check if this is a Ghana transaction and use prymo credit endpoint
+    if (params.recipientCountryCode == 'GH') {
+      return await _creditAirtimeGhana(params, maxAttempts);
+    }
+
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         final customIdentifier =
@@ -396,6 +406,103 @@ class PaymentService {
           continue;
         }
         AppLogger.error('Airtime crediting failed', e, null, 'PaymentService');
+        _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
+        return PaymentResult(
+          success: false,
+          message: _sanitizeTopupMessage(rawMessage),
+          errorCode: 'EXCEPTION',
+        );
+      }
+    }
+
+    _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
+    return PaymentResult(
+      success: false,
+      message: _sanitizeTopupMessage('Top-up failed. Please try again later.'),
+      errorCode: 'MAX_RETRIES_EXCEEDED',
+    );
+  }
+
+  /// Credit airtime for Ghana using prymo credit endpoint
+  Future<PaymentResult> _creditAirtimeGhana(TopupParams params, int maxAttempts) async {
+    // Extract network code from operator ID for Ghana
+    // Map operator IDs to network codes (1-AirtelTigo, 4-MTN, etc.)
+    final networkMap = {
+      150: 4, // MTN Ghana
+      151: 1, // AirtelTigo Ghana
+      152: 2, // Vodafone Ghana
+      153: 3, // Glo Ghana
+    };
+    
+    final network = networkMap[params.operatorId] ?? 4; // Default to MTN (4)
+    
+    // Remove country code from recipient number for Ghana
+    String recipientNumber = params.recipientNumber;
+    if (recipientNumber.startsWith('233')) {
+      recipientNumber = '0' + recipientNumber.substring(3);
+    }
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        AppLogger.info(
+          '📱 Crediting airtime for Ghana via prymo credit (attempt $attempt/$maxAttempts)',
+          'PaymentService',
+        );
+
+        // Prepare request for prymo credit endpoint
+        final request = {
+          'recipientNumber': recipientNumber,
+          'amount': params.amount.toStringAsFixed(0), // Send as string without decimal
+          'network': network,
+        };
+
+        final response = await _prymoApiClient.prymoCreditAirtime(request);
+        
+        if (response.statusCode == 201) {
+          final data = response.data as Map<String, dynamic>?;
+          final status = data?['status']?.toString().toUpperCase() ?? '';
+          
+          if (status == 'SUCCESS') {
+            await clearPendingPayment();
+            _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.success;
+            return PaymentResult(
+              success: true,
+              message: 'Airtime top-up successful.',
+              data: data,
+              transactionId: data?['local-trxn-code']?.toString(),
+            );
+          } else {
+            // Handle failure response from prymo
+            final message = data?['message']?.toString() ?? 'Airtime top-up failed';
+            AppLogger.warning('⚠️ Prymo credit failed: $message', 'PaymentService');
+            
+            if (attempt < maxAttempts && (status == 'PENDING' || status == 'PROCESSING')) {
+              await Future.delayed(const Duration(seconds: 4));
+              continue;
+            }
+            
+            _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
+            return PaymentResult(
+              success: false,
+              message: message,
+              errorCode: data?['status-code']?.toString() ?? 'CREDIT_FAILED',
+            );
+          }
+        } else {
+          throw Exception('HTTP ${response.statusCode}: ${response.statusMessage}');
+        }
+      } catch (e) {
+        final rawMessage = _extractErrorMessage(e);
+        final shouldRetry = attempt < maxAttempts && _isRetryableTopupError(rawMessage);
+        if (shouldRetry) {
+          AppLogger.warning(
+            '⏳ Ghana airtime crediting retry $attempt/$maxAttempts: $rawMessage',
+            'PaymentService',
+          );
+          await Future.delayed(const Duration(seconds: 4));
+          continue;
+        }
+        AppLogger.error('Ghana airtime crediting failed', e, null, 'PaymentService');
         _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
         return PaymentResult(
           success: false,

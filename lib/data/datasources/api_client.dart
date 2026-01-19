@@ -13,6 +13,9 @@ abstract class ApiClient {
   // runtime `ParseErrorLogger` interface expects 4 args, causing compilation errors.
   // Errors are already logged via Dio interceptors (LoggingInterceptor).
   factory ApiClient(Dio dio, {String? baseUrl}) = _ApiClient;
+  
+  // Factory for prymo credit endpoint with different base URL
+  factory ApiClient.prymoCredit(Dio dio) = _ApiClient.prymoCredit;
 
   // Authentication
   @POST('${AppConstants.apiVersion}/users/register')
@@ -48,6 +51,10 @@ abstract class ApiClient {
   // Airtime - Prymo Ghana
   @POST('${AppConstants.apiVersion}/airtime/prymo')
   Future<AirtimeResponse> purchaseAirtimePrymo(@Body() AirtimeRequest request);
+
+  // Airtime - Prymo Credit Ghana (for post-payment crediting)
+  @POST('/api/v1/airtime/topup')
+  Future<HttpResponse<dynamic>> prymoCreditAirtime(@Body() Map<String, dynamic> request);
 
   // Data Bundles - Reloadly Global
   @POST('${AppConstants.apiVersion}/data/reloadly')
@@ -181,6 +188,26 @@ class DioClient {
     if (getToken != null) {
       dio.interceptors.add(AuthInterceptor(getToken));
     }
+    dio.interceptors.add(LoggingInterceptor());
+    dio.interceptors.add(RetryInterceptor());
+
+    return dio;
+  }
+  
+  static Dio createPrymoDio() {
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: 'https://tppgh.myone4all.com',
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      ),
+    );
+
+    // Only add logging and retry interceptors for prymo
     dio.interceptors.add(LoggingInterceptor());
     dio.interceptors.add(RetryInterceptor());
 
