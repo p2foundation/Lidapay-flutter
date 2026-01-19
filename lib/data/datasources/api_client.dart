@@ -56,6 +56,18 @@ abstract class ApiClient {
   @POST('/api/v1/airtime/topup')
   Future<HttpResponse<dynamic>> prymoCreditAirtime(@Body() Map<String, dynamic> request);
 
+  // Data Bundles - Prymo Ghana (bundle listing)
+  @GET('/TopUpApi/dataBundleList')
+  Future<HttpResponse<dynamic>> prymoDataBundleList(
+    @Header('ApiKey') String apiKey,
+    @Header('ApiSecret') String apiSecret,
+    @Query('network') int network,
+  );
+
+  // Data Bundles - Prymo Credit Ghana (for post-payment crediting)
+  @POST('/TopUpApi/dataCredit')
+  Future<HttpResponse<dynamic>> prymoCreditData(@Body() Map<String, dynamic> request);
+
   // Data Bundles - Reloadly Global
   @POST('${AppConstants.apiVersion}/data/reloadly')
   Future<DataResponse> purchaseDataReloadly(@Body() DataRequest request);

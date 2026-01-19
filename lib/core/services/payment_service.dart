@@ -9,6 +9,7 @@ import '../../data/models/api_models.dart';
 import '../../data/datasources/api_client.dart';
 import '../../presentation/providers/auth_provider.dart';
 import '../utils/logger.dart';
+import '../../core/constants/app_constants.dart';
 
 /// Extract user-friendly error message from DioException
 String _extractErrorMessage(dynamic error) {
@@ -341,8 +342,8 @@ class PaymentService {
 
     const maxAttempts = 3;
 
-    // Check if this is a Ghana transaction and use prymo credit endpoint
-    if (params.recipientCountryCode == 'GH') {
+    // Check if this is a Ghana transaction and use prymo credit endpoint if enabled
+    if (params.recipientCountryCode == 'GH' && AppConstants.usePrymoForGhanaAirtime) {
       return await _creditAirtimeGhana(params, maxAttempts);
     }
 
@@ -461,15 +462,17 @@ class PaymentService {
         if (response.statusCode == 201) {
           final data = response.data as Map<String, dynamic>?;
           final status = data?['status']?.toString().toUpperCase() ?? '';
+          final statusCode = data?['status-code']?.toString();
           
-          if (status == 'SUCCESS') {
+          // Check for success based on status or status-code
+          if (status == 'OK' || status == 'SUCCESS' || statusCode == '00') {
             await clearPendingPayment();
             _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.success;
             return PaymentResult(
               success: true,
               message: 'Airtime top-up successful.',
               data: data,
-              transactionId: data?['local-trxn-code']?.toString(),
+              transactionId: data?['local-trxn-code']?.toString() ?? data?['trxn']?.toString(),
             );
           } else {
             // Handle failure response from prymo
@@ -485,7 +488,7 @@ class PaymentService {
             return PaymentResult(
               success: false,
               message: message,
-              errorCode: data?['status-code']?.toString() ?? 'CREDIT_FAILED',
+              errorCode: statusCode ?? data?['status-code']?.toString() ?? 'CREDIT_FAILED',
             );
           }
         } else {
@@ -520,6 +523,106 @@ class PaymentService {
     );
   }
 
+  /// Credit data bundle for Ghana using prymo credit endpoint
+  Future<PaymentResult> _creditDataGhana(TopupParams params, int maxAttempts) async {
+    // Extract network code from operator ID for Ghana
+    // Map operator IDs to network codes (1-AirtelTigo, 4-MTN, etc.)
+    final networkMap = {
+      150: 4, // MTN Ghana
+      151: 1, // AirtelTigo Ghana
+      152: 2, // Vodafone Ghana
+      153: 3, // Glo Ghana
+    };
+    
+    final network = networkMap[params.operatorId] ?? 4; // Default to MTN (4)
+    
+    // Remove country code from recipient number for Ghana
+    String recipientNumber = params.recipientNumber;
+    if (recipientNumber.startsWith('233')) {
+      recipientNumber = '0' + recipientNumber.substring(3);
+    }
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        AppLogger.info(
+          '📶 Crediting data for Ghana via prymo credit (attempt $attempt/$maxAttempts)',
+          'PaymentService',
+        );
+
+        // Prepare request for prymo data credit endpoint
+        final request = {
+          'recipientNumber': recipientNumber,
+          'amount': params.amount.toStringAsFixed(0), // Send as string without decimal
+          'network': network,
+          'bundleId': params.bundleId ?? '', // Include bundle ID for data
+        };
+
+        final response = await _prymoApiClient.prymoCreditData(request);
+        
+        if (response.statusCode == 201) {
+          final data = response.data as Map<String, dynamic>?;
+          final status = data?['status']?.toString().toUpperCase() ?? '';
+          final statusCode = data?['status-code']?.toString();
+          
+          // Check for success based on status or status-code
+          if (status == 'OK' || status == 'SUCCESS' || statusCode == '00') {
+            await clearPendingPayment();
+            _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.success;
+            return PaymentResult(
+              success: true,
+              message: 'Data bundle purchase successful.',
+              data: data,
+              transactionId: data?['local-trxn-code']?.toString() ?? data?['trxn']?.toString(),
+            );
+          } else {
+            // Handle failure response from prymo
+            final message = data?['message']?.toString() ?? 'Data bundle purchase failed';
+            AppLogger.warning('⚠️ Prymo data credit failed: $message', 'PaymentService');
+            
+            if (attempt < maxAttempts && (status == 'PENDING' || status == 'PROCESSING')) {
+              await Future.delayed(const Duration(seconds: 4));
+              continue;
+            }
+            
+            _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
+            return PaymentResult(
+              success: false,
+              message: message,
+              errorCode: statusCode ?? data?['status-code']?.toString() ?? 'CREDIT_FAILED',
+            );
+          }
+        } else {
+          throw Exception('HTTP ${response.statusCode}: ${response.statusMessage}');
+        }
+      } catch (e) {
+        final rawMessage = _extractErrorMessage(e);
+        final shouldRetry = attempt < maxAttempts && _isRetryableTopupError(rawMessage);
+        if (shouldRetry) {
+          AppLogger.warning(
+            '⏳ Ghana data crediting retry $attempt/$maxAttempts: $rawMessage',
+            'PaymentService',
+          );
+          await Future.delayed(const Duration(seconds: 4));
+          continue;
+        }
+        AppLogger.error('Ghana data crediting failed', e, null, 'PaymentService');
+        _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
+        return PaymentResult(
+          success: false,
+          message: _sanitizeTopupMessage(rawMessage),
+          errorCode: 'EXCEPTION',
+        );
+      }
+    }
+
+    _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.failed;
+    return PaymentResult(
+      success: false,
+      message: _sanitizeTopupMessage('Data purchase failed. Please try again later.'),
+      errorCode: 'MAX_RETRIES_EXCEEDED',
+    );
+  }
+
   /// Credit data bundle after successful payment
   Future<PaymentResult> creditData({
     required String userId,
@@ -528,6 +631,11 @@ class PaymentService {
     _ref.read(paymentFlowStateProvider.notifier).state = PaymentFlowState.crediting;
 
     const maxAttempts = 3;
+
+    // Check if this is a Ghana transaction and use prymo credit endpoint if enabled
+    if (params.recipientCountryCode == 'GH' && AppConstants.usePrymoForGhanaData) {
+      return await _creditDataGhana(params, maxAttempts);
+    }
 
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -606,6 +714,35 @@ class PaymentService {
       message: _sanitizeTopupMessage('Top-up failed. Please try again later.'),
       errorCode: 'MAX_RETRIES_EXCEEDED',
     );
+  }
+
+  /// Fetch data bundles for Ghana using Prymo API
+  Future<List<Map<String, dynamic>>> fetchGhanaDataBundles(int networkCode) async {
+    try {
+      AppLogger.info('📶 Fetching Ghana data bundles for network: $networkCode', 'PaymentService');
+      
+      final response = await _prymoApiClient.prymoDataBundleList(
+        AppConstants.prymoApiKey,
+        AppConstants.prymoApiSecret,
+        networkCode,
+      );
+      
+      if (response.statusCode == 200) {
+        final data = response.data as Map<String, dynamic>?;
+        final bundles = data?['data'] as List<dynamic>? ?? [];
+        
+        // Convert to list of maps
+        final bundleList = bundles.map((bundle) => bundle as Map<String, dynamic>).toList();
+        
+        AppLogger.info('✅ Retrieved ${bundleList.length} data bundles for Ghana', 'PaymentService');
+        return bundleList;
+      } else {
+        throw Exception('Failed to fetch data bundles: HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      AppLogger.error('Failed to fetch Ghana data bundles', e, null, 'PaymentService');
+      throw Exception('Failed to fetch data bundles: ${e.toString()}');
+    }
   }
 
   /// Query payment transaction status using token with retry support

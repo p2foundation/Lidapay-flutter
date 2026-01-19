@@ -45,5 +45,13 @@ class AppConstants {
   // Airtime/Data
   static const List<double> airtimePresets = [10.0, 20.0, 50.0, 100.0, 200.0, 500.0];
   static const List<double> dataPresets = [1.0, 2.0, 5.0, 10.0, 20.0, 50.0]; // GB
+  
+  // Ghana API Configuration
+  static const bool usePrymoForGhanaAirtime = true; // Switch to false to use Reloadly
+  static const bool usePrymoForGhanaData = true; // Switch to false to use Reloadly
+  
+  // Prymo API Credentials (for Ghana)
+  static const String prymoApiKey = 'YOUR_API_KEY'; // Replace with actual API key
+  static const String prymoApiSecret = 'YOUR_API_SECRET'; // Replace with actual API secret
 }
 

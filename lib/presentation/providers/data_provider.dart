@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/repositories/data_repository.dart';
 import '../../data/models/api_models.dart';
 import 'auth_provider.dart';
+import '../../core/services/payment_service.dart';
+import '../../core/constants/app_constants.dart';
 
 final dataRepositoryProvider = Provider<DataRepository>((ref) {
   final apiClient = ref.watch(apiClientProvider);
@@ -11,6 +13,16 @@ final dataRepositoryProvider = Provider<DataRepository>((ref) {
 final dataPurchaseProvider = StateNotifierProvider<DataPurchaseNotifier, AsyncValue<DataData?>>((ref) {
   final repository = ref.watch(dataRepositoryProvider);
   return DataPurchaseNotifier(repository);
+});
+
+// Provider for Ghana data bundles
+final ghanaDataBundlesProvider = FutureProvider.family<List<Map<String, dynamic>>, int>((ref, networkCode) async {
+  if (!AppConstants.usePrymoForGhanaData) {
+    return [];
+  }
+  
+  final paymentService = ref.watch(paymentServiceProvider);
+  return await paymentService.fetchGhanaDataBundles(networkCode);
 });
 
 class DataPurchaseNotifier extends StateNotifier<AsyncValue<DataData?>> {
