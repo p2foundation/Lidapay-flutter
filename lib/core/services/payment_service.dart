@@ -431,7 +431,7 @@ class PaymentService {
     final networkMap = {
       150: 4, // MTN Ghana
       151: 1, // AirtelTigo Ghana
-      152: 2, // Vodafone Ghana
+      152: 6, // Telecel Ghana (formerly Vodafone Ghana)
       153: 3, // Glo Ghana
     };
     
@@ -530,7 +530,7 @@ class PaymentService {
     final networkMap = {
       150: 4, // MTN Ghana
       151: 1, // AirtelTigo Ghana
-      152: 2, // Vodafone Ghana
+      152: 6, // Telecel Ghana (formerly Vodafone Ghana)
       153: 3, // Glo Ghana
     };
     
