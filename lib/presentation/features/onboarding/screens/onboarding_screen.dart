@@ -3,18 +3,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../providers/onboarding_provider.dart';
 
 /// Modern Gen Z Onboarding Screen
 /// Features: Gradient backgrounds, floating elements, smooth animations
-class OnboardingScreen extends StatefulWidget {
+class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
   @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen>
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     with TickerProviderStateMixin {
   final PageController _pageController = PageController();
   int _currentPage = 0;
@@ -82,8 +85,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     }
   }
 
-  void _goToAuth() {
+  void _goToAuth() async {
     HapticFeedback.mediumImpact();
+    // Mark onboarding as completed using provider
+    final notifier = ref.read(onboardingNotifierProvider);
+    await notifier.completeOnboarding();
     context.go('/login');
   }
 

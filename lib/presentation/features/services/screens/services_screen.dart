@@ -122,6 +122,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
           ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.all(18),
+          isDense: true,
         ),
       ),
     ).animate().fadeIn(delay: 100.ms);
@@ -134,6 +135,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Row(
         children: _categories.asMap().entries.map((entry) {
           final isSelected = entry.key == _selectedCategory;

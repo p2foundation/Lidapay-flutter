@@ -230,6 +230,8 @@ class _ServiceCardState extends State<ServiceCard>
                                     ?.copyWith(
                                       fontWeight: FontWeight.w700,
                                     ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             if (widget.isNew)
@@ -270,6 +272,8 @@ class _ServiceCardState extends State<ServiceCard>
                                           ? AppColors.darkTextSecondary
                                           : AppColors.lightTextSecondary,
                                     ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ],
@@ -421,6 +425,8 @@ class _HeroServiceCardState extends State<HeroServiceCard>
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
                         ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -428,6 +434,8 @@ class _HeroServiceCardState extends State<HeroServiceCard>
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Colors.white.withOpacity(0.9),
                         ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: AppSpacing.md),
                   Row(

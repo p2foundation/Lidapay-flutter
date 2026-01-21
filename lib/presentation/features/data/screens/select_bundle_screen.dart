@@ -7,7 +7,9 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_back_button.dart';
 import '../../../../data/models/api_models.dart';
 import '../../../providers/data_wizard_provider.dart';
+import '../../../providers/data_provider.dart';
 import '../../../../core/widgets/custom_bottom_nav.dart';
+import '../../../../core/utils/ghana_network_codes.dart';
 
 class SelectBundleScreen extends ConsumerStatefulWidget {
   const SelectBundleScreen({super.key});
@@ -63,7 +65,13 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
   List<DataBundle> _generateBundles(
     DataOperator operator,
     Map<int, Map<String, dynamic>>? operatorMetadata,
+    Country? country,
   ) {
+    // Special handling for Ghana bundles
+    if (country?.code == 'GH') {
+      return _generateGhanaBundles(operator);
+    }
+    
     final metadata = operatorMetadata?[operator.operatorId];
     if (metadata == null) {
       return [];
@@ -120,6 +128,78 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
     });
   }
   
+  List<DataBundle> _generateGhanaBundles(DataOperator operator) {
+    final networkCode = GhanaNetworkCodes.fromOperatorId(operator.operatorId);
+    final bundleListAsync = ref.watch(ghanaDataBundlesProvider(networkCode));
+    
+    return bundleListAsync.when(
+      data: (bundles) {
+        return bundles.asMap().entries.map((entry) {
+          final index = entry.key;
+          final bundle = entry.value;
+          
+          // Create user-friendly display name
+          String displayName = bundle['plan_name'] ?? 'Unknown Bundle';
+          final volume = bundle['volume'] ?? '';
+          final price = bundle['price']?.toString() ?? '0';
+          
+          // Format readable name: "7.27 GB - GHS 3.00" or "40.91 MB - GHS 1.00"
+          if (volume.isNotEmpty && !displayName.toLowerCase().contains('ghc')) {
+            // Extract data amount from volume if available
+            if (volume.contains('GB') || volume.contains('MB')) {
+              displayName = "${volume.split(' of ')[0]} - GHS $price";
+            } else {
+              displayName = "$volume - GHS $price";
+            }
+          } else {
+            // Clean up the original name
+            displayName = displayName.replaceAll('_Others', '').replaceAll('_', ' ');
+          }
+          
+          // Format the description to show additional details
+          String description = '';
+          final validity = bundle['validity'];
+          final category = bundle['category'];
+          
+          // Add validity info
+          if (validity != null && validity != 'NO EXPIRY' && validity != '') {
+            description += validity;
+          } else if (validity == 'NO EXPIRY') {
+            description += 'No expiry';
+          }
+          
+          // Add type info for special bundles
+          if (category == 'FLEXI') {
+            if (description.isNotEmpty) description += ' • ';
+            description += 'Flexi amount';
+          }
+          
+          // Add special bundle info
+          if (bundle['plan_name'].toString().toLowerCase().contains('midnight')) {
+            if (description.isNotEmpty) description += ' • ';
+            description += 'Midnight bundle (12AM-8AM)';
+          }
+          
+          return DataBundle(
+            id: index + 1000, // Use unique IDs starting from 1000 to avoid conflicts
+            name: displayName, // User-friendly name for display
+            description: description, // Additional details
+            amount: double.tryParse(bundle['price']?.toString() ?? '0') ?? 0.0,
+            currency: 'GHS',
+            validity: validity,
+            planId: bundle['plan_id'], // Store original plan_id for API call
+            metadata: {
+              ...bundle,
+              'original_name': bundle['plan_name'], // Keep original name for reference
+            },
+          );
+        }).toList();
+      },
+      loading: () => [],
+      error: (_, __) => [],
+    );
+  }
+  
   List<DataBundle> _getDisplayBundles(List<DataBundle> allBundles) {
     if (_showAllBundles || allBundles.length <= _initialBundleCount) {
       return allBundles;
@@ -148,7 +228,7 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
     );
 
     final bundles = _selectedOperator != null
-        ? _generateBundles(_selectedOperator!, wizardState.operatorMetadata)
+        ? _generateBundles(_selectedOperator!, wizardState.operatorMetadata, selectedCountry)
         : <DataBundle>[];
 
     return Scaffold(
@@ -473,7 +553,7 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            '${bundle.currency} ${bundle.amount.toStringAsFixed(2)}',
+                            'GHS ${bundle.amount.toStringAsFixed(2)}',
                             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                   color: AppColors.success,
                                   fontWeight: FontWeight.w700,

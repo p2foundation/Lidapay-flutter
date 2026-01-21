@@ -79,6 +79,12 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
   String get _displayPaymentCurrency => widget.paymentCurrency ?? widget.currency;
   double get _displayTopupAmount => widget.topupAmount ?? widget.amount;
   String get _displayTopupCurrency => widget.topupCurrency ?? widget.currency;
+  
+  // For Ghana transactions, show top-up amount as primary
+  double get _primaryAmount => (widget.transactionType == 'PRYMOAIRTIME' || widget.transactionType == 'PRYMODATA') ? _displayTopupAmount : _displayPaymentAmount;
+  String get _primaryCurrency => (widget.transactionType == 'PRYMOAIRTIME' || widget.transactionType == 'PRYMODATA') ? _displayTopupCurrency : _displayPaymentCurrency;
+  double get _secondaryAmount => (widget.transactionType == 'PRYMOAIRTIME' || widget.transactionType == 'PRYMODATA') ? _displayPaymentAmount : _displayTopupAmount;
+  String get _secondaryCurrency => (widget.transactionType == 'PRYMOAIRTIME' || widget.transactionType == 'PRYMODATA') ? _displayPaymentCurrency : _displayTopupCurrency;
 
   String get _transactionTypeLabel {
     switch (widget.transactionType.toUpperCase()) {
@@ -142,8 +148,8 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
     final pdf = pw.Document();
     final timestamp = widget.timestamp ?? DateTime.now();
     final dateLabel = DateFormat('dd MMM yyyy - HH:mm').format(timestamp);
-    final amountLabel = '${_displayPaymentCurrency} ${_displayPaymentAmount.toStringAsFixed(2)}';
-    final topupLabel = '${_displayTopupCurrency} ${_displayTopupAmount.toStringAsFixed(2)}';
+    final amountLabel = '${_primaryCurrency} ${_primaryAmount.toStringAsFixed(2)}';
+    final topupLabel = _primaryCurrency != _secondaryCurrency ? '${_secondaryCurrency} ${_secondaryAmount.toStringAsFixed(2)}' : null;
 
     final primaryColor = PdfColor.fromInt(0xFFEC4899);
     final darkColor = PdfColor.fromInt(0xFF2D2952);
@@ -180,8 +186,9 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
     final details = <MapEntry<String, String>>[
       MapEntry('Transaction Type', _transactionTypeLabel),
       MapEntry('Status', statusLabel),
-      MapEntry('Payment Amount', amountLabel),
-      MapEntry('Top-up Amount', topupLabel),
+      MapEntry((widget.transactionType == 'PRYMOAIRTIME' || widget.transactionType == 'PRYMODATA') ? 'Bundle Amount' : 'Payment Amount', amountLabel),
+      if (topupLabel != null) 
+        MapEntry((widget.transactionType == 'PRYMOAIRTIME' || widget.transactionType == 'PRYMODATA') ? 'Paid Amount' : 'Top-up Amount', topupLabel),
       MapEntry('Recipient', widget.recipientNumber),
       MapEntry('Date & Time', dateLabel),
     ];
@@ -566,9 +573,9 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
           
           const SizedBox(height: AppSpacing.sm),
           
-          // Amount
+          // Amount (Primary)
           Text(
-            '${_displayPaymentCurrency} ${_displayPaymentAmount.toStringAsFixed(2)}',
+            '${_primaryCurrency} ${_primaryAmount.toStringAsFixed(2)}',
             style: Theme.of(context).textTheme.displaySmall?.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
@@ -576,13 +583,18 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
           ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.2, end: 0),
 
           const SizedBox(height: AppSpacing.xs),
-          Text(
-            'Top-up: ${_displayTopupCurrency} ${_displayTopupAmount.toStringAsFixed(2)}',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.white.withOpacity(0.9),
-                  fontWeight: FontWeight.w600,
-                ),
-          ).animate().fadeIn(delay: 320.ms).slideY(begin: 0.2, end: 0),
+          // Secondary amount (show the other amount)
+          if (_primaryCurrency != _secondaryCurrency) ...[
+            Text(
+              (widget.transactionType == 'PRYMOAIRTIME' || widget.transactionType == 'PRYMODATA')
+                  ? 'Paid: ${_secondaryCurrency} ${_secondaryAmount.toStringAsFixed(2)}'
+                  : 'Top-up: ${_secondaryCurrency} ${_secondaryAmount.toStringAsFixed(2)}',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white.withOpacity(0.9),
+                    fontWeight: FontWeight.w600,
+                  ),
+            ).animate().fadeIn(delay: 320.ms).slideY(begin: 0.2, end: 0),
+          ],
           
           const SizedBox(height: AppSpacing.sm),
           
@@ -724,17 +736,19 @@ class _PaymentReceiptScreenState extends ConsumerState<PaymentReceiptScreen>
                 ],
                 const SizedBox(height: AppSpacing.md),
                 _ReceiptRow(
-                  label: 'Payment Amount',
-                  value: '${_displayPaymentCurrency} ${_displayPaymentAmount.toStringAsFixed(2)}',
+                  label: (widget.transactionType == 'PRYMOAIRTIME' || widget.transactionType == 'PRYMODATA') ? 'Bundle Amount' : 'Payment Amount',
+                  value: '${_primaryCurrency} ${_primaryAmount.toStringAsFixed(2)}',
                   isDark: isDark,
                   isHighlighted: true,
                 ),
                 const SizedBox(height: AppSpacing.md),
-                _ReceiptRow(
-                  label: 'Top-up Amount',
-                  value: '${_displayTopupCurrency} ${_displayTopupAmount.toStringAsFixed(2)}',
-                  isDark: isDark,
-                ),
+                if (_primaryCurrency != _secondaryCurrency) ...[
+                  _ReceiptRow(
+                    label: (widget.transactionType == 'PRYMOAIRTIME' || widget.transactionType == 'PRYMODATA') ? 'Paid Amount' : 'Top-up Amount',
+                    value: '${_secondaryCurrency} ${_secondaryAmount.toStringAsFixed(2)}',
+                    isDark: isDark,
+                  ),
+                ],
                 if (widget.transactionId != null) ...[
                   const SizedBox(height: AppSpacing.md),
                   const Divider(),

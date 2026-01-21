@@ -13,6 +13,7 @@ import 'core/utils/logger.dart';
 import 'core/constants/app_constants.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/locale_provider.dart';
+import 'presentation/providers/onboarding_provider.dart';
 
 // Global navigator key for deep linking
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -26,6 +27,10 @@ void main() async {
   AppLogger.info('📦 Initializing SharedPreferences', 'Main');
   final prefs = await SharedPreferences.getInstance();
   AppLogger.info('✅ SharedPreferences initialized', 'Main');
+
+  // Check onboarding completion status
+  final onboardingCompleted = prefs.getBool(AppConstants.onboardingCompletedKey) ?? false;
+  AppLogger.info('📋 Onboarding completed: $onboardingCompleted', 'Main');
 
   ThemeMode initialThemeMode = ThemeMode.light;
   final savedThemeMode = prefs.getString(AppConstants.themeModeKey);
@@ -48,11 +53,12 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
   
-  // Set system UI overlay style
+  // Set system UI overlay style to ensure proper status bar handling
   SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
+    SystemUiOverlayStyle.dark.copyWith(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
     ),
   );
   
@@ -64,6 +70,7 @@ void main() async {
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         themeModeProvider.overrideWith((ref) => initialThemeMode),
+        onboardingCompletedProvider.overrideWithValue(onboardingCompleted),
       ],
       child: const LidapayApp(),
     ),

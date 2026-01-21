@@ -9,6 +9,7 @@ class AppConstants {
   static const String userIdKey = 'user_id';
   static const String themeModeKey = 'theme_mode';
   static const String recentTransactionsKey = 'recent_transactions';
+  static const String onboardingCompletedKey = 'onboarding_completed';
   
   // Remember Me Keys
   static const String rememberMeKey = 'remember_me';

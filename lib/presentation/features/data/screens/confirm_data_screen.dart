@@ -8,7 +8,9 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/widgets/app_back_button.dart';
 import '../../../../core/services/payment_service.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../data/models/api_models.dart';
+import '../../../../core/utils/ghana_network_codes.dart';
 import '../../../providers/data_wizard_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../../core/widgets/custom_bottom_nav.dart';
@@ -194,6 +196,7 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
       return;
     }
 
+    // Enhanced: Try query status 3 times with better delay
     const maxAttempts = 3;
     PaymentResult? lastResult;
 
@@ -205,20 +208,23 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
 
       final result = await paymentService.queryPaymentStatus(
         token,
-        maxRetries: 1,
-        retryDelaySeconds: 0,
+        maxRetries: 1, // Each query attempt has 1 retry
+        retryDelaySeconds: 2, // Shorter delay between retries
       );
       if (!mounted) return;
 
+      // Check if payment is COMPLETED or SUCCESSFUL
       if (result.success) {
+        AppLogger.info('✅ Data payment verified successfully on attempt $attempt', 'ConfirmDataScreen');
         await _creditData();
         return;
       }
 
       lastResult = result;
 
+      // If not last attempt, wait longer before trying again
       if (attempt < maxAttempts) {
-        await Future.delayed(const Duration(seconds: 4));
+        await Future.delayed(const Duration(seconds: 3));
       }
     }
 
@@ -270,82 +276,14 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
         throw Exception('User ID not found. Please login again.');
       }
 
-      // Calculate FX converted amount for payment
-      final fxRate = selectedOperator.fx?['rate'] as double?;
-      final fxCurrencyCode = selectedOperator.fx?['currencyCode'] as String?;
-      final paymentAmount = fxRate != null ? (selectedBundle.amount * fxRate) : selectedBundle.amount;
-      final paymentCurrency = fxCurrencyCode ?? 'GHS';
-
-      // Generate unique reference
-      final payTransRef = generatePaymentReference();
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-
-      // Prepare topup params for after-payment crediting
-      final bundleLabel = selectedBundle.description.isNotEmpty
-          ? selectedBundle.description
-          : selectedBundle.name;
-      final localRecipientNumber = normalizeLocalNumber(phoneNumber, country);
-      final localSenderNumber = normalizeLocalNumber(user?.phoneNumber, country);
-
-      final topupParams = TopupParams(
-        operatorId: selectedOperator.operatorId,
-        amount: selectedBundle.amount,
-        description: 'Data bundle: $bundleLabel for $phoneNumber (${selectedOperator.name})',
-        recipientEmail: user?.email ?? 'user@example.com',
-        recipientNumber: localRecipientNumber.isNotEmpty ? localRecipientNumber : phoneNumber,
-        recipientCountryCode: country.code,
-        senderNumber: localSenderNumber.isNotEmpty ? localSenderNumber : (user?.phoneNumber ?? ''),
-        senderCountryCode: country.code,
-        payTransRef: payTransRef,
-        transType: 'GLOBALDATATOPUP',
-        customerEmail: user?.email ?? '',
-        customIdentifier: 'reloadly-data $timestamp',
-        bundleId: selectedBundle.id,
-      );
-
-      setState(() {
-        _statusMessage = 'Initiating payment...';
-      });
-
-      // Initiate payment with FX converted amount
-      final paymentService = ref.read(paymentServiceProvider);
-      final result = await paymentService.initiatePayment(
-        userId: userId,
-        firstName: user?.firstName ?? 'User',
-        lastName: user?.lastName ?? '',
-        email: user?.email ?? 'user@example.com',
-        phoneNumber: phoneNumber,
-        username: user?.username ?? 'user',
-        amount: paymentAmount,
-        orderDesc: 'Data purchase: ${selectedBundle.name} for $phoneNumber - ${selectedBundle.currency}${selectedBundle.amount.toStringAsFixed(2)} (≈ ${paymentCurrency}${paymentAmount.toStringAsFixed(2)}) on ${DateTime.now().toString().split(' ')[0]}',
-        topupParams: topupParams,
-      );
-
-      if (result.success) {
-        await paymentService.storePaymentDisplayInfo(
-          result.transactionId,
-          topupAmount: selectedBundle.amount,
-          topupCurrency: selectedBundle.currency,
-          paymentAmount: paymentAmount,
-          paymentCurrency: paymentCurrency,
-        );
-        setState(() {
-          _statusMessage = 'Redirecting to payment page...';
-          _paymentState = PaymentFlowState.awaitingCallback;
-        });
-        // Payment page will open in browser
-        // App will detect when user returns via lifecycle observer
-      } else {
-        setState(() {
-          _error = result.message;
-          _isProcessing = false;
-          _statusMessage = '';
-          _paymentState = PaymentFlowState.failed;
-        });
-        if (mounted) {
-          _showFailureReceipt(result.message, transactionId: topupParams.payTransRef);
-        }
+      // Check if this is a Ghana transaction and use direct Prymo flow
+      if (country.code == 'GH' && AppConstants.usePrymoForGhanaData) {
+        await _initiateGhanaPayment(userId, user, country, selectedOperator, selectedBundle, phoneNumber);
+        return;
       }
+
+      // Continue with Reloadly/ExpressPay flow for other countries
+      await _initiateInternationalPayment(userId, user, country, selectedOperator, selectedBundle, phoneNumber);
     } catch (e) {
       final message = e.toString().replaceAll('Exception: ', '');
       setState(() {
@@ -357,6 +295,174 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
       if (mounted) {
         final reference = await _resolvePaymentReference();
         _showFailureReceipt(message, transactionId: reference);
+      }
+    }
+  }
+
+  Future<void> _initiateGhanaPayment(
+    String userId,
+    User? user,
+    Country country,
+    DataOperator selectedOperator,
+    DataBundle selectedBundle,
+    String phoneNumber,
+  ) async {
+    final network = GhanaNetworkCodes.fromOperatorId(selectedOperator.operatorId);
+
+    // Generate unique reference
+    final payTransRef = generatePaymentReference();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+
+    // Prepare topup params for after-payment crediting
+    final bundleLabel = selectedBundle.description.isNotEmpty
+        ? selectedBundle.description
+        : selectedBundle.name;
+    final localRecipientNumber = normalizeLocalNumber(phoneNumber, country);
+    final localSenderNumber = normalizeLocalNumber(user?.phoneNumber, country);
+
+    final topupParams = TopupParams(
+      operatorId: selectedOperator.operatorId,
+      amount: selectedBundle.amount,
+      description: 'Data bundle: $bundleLabel for $phoneNumber (${selectedOperator.name})',
+      recipientEmail: user?.email ?? 'user@example.com',
+      recipientNumber: localRecipientNumber.isNotEmpty ? localRecipientNumber : phoneNumber,
+      recipientCountryCode: country.code,
+      senderNumber: localSenderNumber.isNotEmpty ? localSenderNumber : (user?.phoneNumber ?? ''),
+      senderCountryCode: country.code,
+      payTransRef: payTransRef,
+      transType: 'PRYMODATA', // Use Prymo transaction type
+      customerEmail: user?.email ?? '',
+      customIdentifier: 'prymo-data $timestamp',
+      bundleId: selectedBundle.id.toString(), // Keep as string for compatibility
+      dataCode: selectedBundle.planId, // Use planId for Ghana data bundles
+    );
+
+    setState(() {
+      _statusMessage = 'Initiating payment...';
+    });
+
+    // Initiate payment with ExpressPay (still needed for Ghana)
+    final paymentService = ref.read(paymentServiceProvider);
+    final result = await paymentService.initiatePayment(
+      userId: userId,
+      firstName: user?.firstName ?? 'User',
+      lastName: user?.lastName ?? '',
+      email: user?.email ?? 'user@example.com',
+      phoneNumber: phoneNumber,
+      username: user?.username ?? 'user',
+      amount: selectedBundle.amount, // Use amount directly for Ghana (GHS)
+      orderDesc: 'Data purchase: ${selectedBundle.name} for $phoneNumber - GHS${selectedBundle.amount.toStringAsFixed(2)} on ${DateTime.now().toString().split(' ')[0]}',
+      topupParams: topupParams,
+    );
+
+    if (result.success) {
+      await paymentService.storePaymentDisplayInfo(
+        result.transactionId,
+        topupAmount: selectedBundle.amount,
+        topupCurrency: 'GHS',
+        paymentAmount: selectedBundle.amount,
+        paymentCurrency: 'GHS',
+      );
+      setState(() {
+        _statusMessage = 'Redirecting to payment page...';
+        _paymentState = PaymentFlowState.awaitingCallback;
+      });
+    } else {
+      setState(() {
+        _error = result.message;
+        _isProcessing = false;
+        _statusMessage = '';
+        _paymentState = PaymentFlowState.failed;
+      });
+      if (mounted) {
+        _showFailureReceipt(result.message, transactionId: topupParams.payTransRef);
+      }
+    }
+  }
+
+  Future<void> _initiateInternationalPayment(
+    String userId,
+    User? user,
+    Country country,
+    DataOperator selectedOperator,
+    DataBundle selectedBundle,
+    String phoneNumber,
+  ) async {
+    // Calculate FX converted amount for payment
+    final fxRate = selectedOperator.fx?['rate'] as double?;
+    final fxCurrencyCode = selectedOperator.fx?['currencyCode'] as String?;
+    final paymentAmount = fxRate != null ? (selectedBundle.amount * fxRate) : selectedBundle.amount;
+    final paymentCurrency = fxCurrencyCode ?? 'GHS';
+
+    // Generate unique reference
+    final payTransRef = generatePaymentReference();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+
+    // Prepare topup params for after-payment crediting
+    final bundleLabel = selectedBundle.description.isNotEmpty
+        ? selectedBundle.description
+        : selectedBundle.name;
+    final localRecipientNumber = normalizeLocalNumber(phoneNumber, country);
+    final localSenderNumber = normalizeLocalNumber(user?.phoneNumber, country);
+
+    final topupParams = TopupParams(
+      operatorId: selectedOperator.operatorId,
+      amount: selectedBundle.amount,
+      description: 'Data bundle: $bundleLabel for $phoneNumber (${selectedOperator.name})',
+      recipientEmail: user?.email ?? 'user@example.com',
+      recipientNumber: localRecipientNumber.isNotEmpty ? localRecipientNumber : phoneNumber,
+      recipientCountryCode: country.code,
+      senderNumber: localSenderNumber.isNotEmpty ? localSenderNumber : (user?.phoneNumber ?? ''),
+      senderCountryCode: country.code,
+      payTransRef: payTransRef,
+      transType: 'GLOBALDATATOPUP',
+      customerEmail: user?.email ?? '',
+      customIdentifier: 'global-data $timestamp',
+      bundleId: selectedBundle.id.toString(),
+      dataCode: selectedBundle.planId, // Include planId for consistency
+    );
+
+    setState(() {
+      _statusMessage = 'Initiating payment...';
+    });
+
+    // Initiate payment with FX converted amount
+    final paymentService = ref.read(paymentServiceProvider);
+    final result = await paymentService.initiatePayment(
+      userId: userId,
+      firstName: user?.firstName ?? 'User',
+      lastName: user?.lastName ?? '',
+      email: user?.email ?? 'user@example.com',
+      phoneNumber: phoneNumber,
+      username: user?.username ?? 'user',
+      amount: paymentAmount,
+      orderDesc: 'Data purchase: ${selectedBundle.name} for $phoneNumber - ${selectedBundle.currency}${selectedBundle.amount.toStringAsFixed(2)} (≈ ${paymentCurrency}${paymentAmount.toStringAsFixed(2)}) on ${DateTime.now().toString().split(' ')[0]}',
+      topupParams: topupParams,
+    );
+
+    if (result.success) {
+      await paymentService.storePaymentDisplayInfo(
+        result.transactionId,
+        topupAmount: selectedBundle.amount,
+        topupCurrency: selectedBundle.currency,
+        paymentAmount: paymentAmount,
+        paymentCurrency: paymentCurrency,
+      );
+      setState(() {
+        _statusMessage = 'Redirecting to payment page...';
+        _paymentState = PaymentFlowState.awaitingCallback;
+      });
+      // Payment page will open in browser
+      // App will detect when user returns via lifecycle observer
+    } else {
+      setState(() {
+        _error = result.message;
+        _isProcessing = false;
+        _statusMessage = '';
+        _paymentState = PaymentFlowState.failed;
+      });
+      if (mounted) {
+        _showFailureReceipt(result.message, transactionId: topupParams.payTransRef);
       }
     }
   }
@@ -471,12 +577,17 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
     final selectedOperator = wizardState.selectedOperator;
     final country = wizardState.selectedCountry;
     final phoneNumber = wizardState.phoneNumber;
+    
+    // Check if this is Ghana transaction
+    final isGhana = country?.code == 'GH';
+    
     final fxRate = selectedOperator?.fx?['rate'] as double?;
     final fxCurrencyCode = selectedOperator?.fx?['currencyCode'] as String?;
     final paymentAmount = selectedBundle != null && fxRate != null
         ? (selectedBundle.amount * fxRate)
         : selectedBundle?.amount ?? 0.0;
-    final paymentCurrency = fxCurrencyCode ?? country?.currencyCode ?? 'GHS';
+    final paymentCurrency = isGhana ? 'GHS' : (fxCurrencyCode ?? country?.currencyCode ?? 'GHS');
+    final topupCurrency = isGhana ? 'GHS' : (selectedBundle?.currency ?? 'USD');
     
     // Set flag before navigation to prevent redirect to select country
     setState(() {
@@ -486,12 +597,12 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
     // Navigate to receipt screen with transaction details
     context.go('/payment/receipt', extra: {
       'isSuccess': true,
-      'transactionType': 'GLOBALDATATOPUP',
+      'transactionType': isGhana ? 'PRYMODATA' : 'GLOBALDATATOPUP',
       'transactionId': result.transactionId,
       'amount': paymentAmount,
       'currency': paymentCurrency,
       'topupAmount': selectedBundle?.amount ?? 0.0,
-      'topupCurrency': selectedBundle?.currency ?? 'USD',
+      'topupCurrency': topupCurrency,
       'paymentAmount': paymentAmount,
       'paymentCurrency': paymentCurrency,
       'recipientNumber': phoneNumber ?? '',
@@ -508,12 +619,17 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
     final selectedOperator = wizardState.selectedOperator;
     final country = wizardState.selectedCountry;
     final phoneNumber = wizardState.phoneNumber;
+    
+    // Check if this is Ghana transaction
+    final isGhana = country?.code == 'GH';
+    
     final fxRate = selectedOperator?.fx?['rate'] as double?;
     final fxCurrencyCode = selectedOperator?.fx?['currencyCode'] as String?;
     final paymentAmount = selectedBundle != null && fxRate != null
         ? (selectedBundle.amount * fxRate)
         : selectedBundle?.amount ?? 0.0;
-    final paymentCurrency = fxCurrencyCode ?? country?.currencyCode ?? 'GHS';
+    final paymentCurrency = isGhana ? 'GHS' : (fxCurrencyCode ?? country?.currencyCode ?? 'GHS');
+    final topupCurrency = isGhana ? 'GHS' : (selectedBundle?.currency ?? 'USD');
 
     // Set flag before navigation to prevent redirect to select country
     setState(() {
@@ -522,12 +638,12 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
 
     context.go('/payment/receipt', extra: {
       'isSuccess': false,
-      'transactionType': 'GLOBALDATATOPUP',
+      'transactionType': isGhana ? 'PRYMODATA' : 'GLOBALDATATOPUP',
       'transactionId': transactionId,
       'amount': paymentAmount,
       'currency': paymentCurrency,
       'topupAmount': selectedBundle?.amount ?? 0.0,
-      'topupCurrency': selectedBundle?.currency ?? 'USD',
+      'topupCurrency': topupCurrency,
       'paymentAmount': paymentAmount,
       'paymentCurrency': paymentCurrency,
       'recipientNumber': phoneNumber ?? '',
@@ -614,7 +730,7 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
                           ),
                     ),
                     const SizedBox(height: AppSpacing.lg),
-                    _buildConfirmationCard(context, country, selectedOperator, phoneNumber, selectedBundle),
+                    _buildConfirmationCard(context, country, phoneNumber, selectedOperator, selectedBundle),
                     if (_statusMessage.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.md),
                       _buildStatusIndicator(context),
@@ -743,11 +859,26 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
   Widget _buildConfirmationCard(
     BuildContext context,
     Country country,
-    DataOperator operator,
     String phoneNumber,
+    DataOperator operator,
     DataBundle bundle,
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isGhana = country.code == 'GH';
+    
+    // Extract bundle info from metadata for Ghana bundles
+    String bundleName = bundle.name; // This is now the user-friendly name
+    String bundleVolume = bundle.description;
+    String bundleValidity = bundle.validity ?? 'N/A';
+    
+    if (isGhana && bundle.metadata != null) {
+      final metadata = bundle.metadata as Map<String, dynamic>;
+      // For Ghana bundles, the volume is stored in metadata
+      if (metadata['volume'] != null) {
+        bundleVolume = metadata['volume'];
+      }
+      bundleValidity = metadata['validity'] ?? 'No expiry';
+    }
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -788,19 +919,29 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
           const Divider(height: AppSpacing.xl),
           _buildDetailItem('Phone Number', phoneNumber, Icons.phone_rounded),
           const Divider(height: AppSpacing.xl),
-          _buildDetailItem('Data Bundle', bundle.description, Icons.data_usage_rounded),
+          _buildDetailItem('Data Bundle', bundleName, Icons.data_usage_rounded),
           const Divider(height: AppSpacing.xl),
-          _buildDetailItem('Validity', bundle.validity ?? 'N/A', Icons.schedule_rounded),
+          if (bundleVolume.isNotEmpty) ...[
+            _buildDetailItem('Data Volume', bundleVolume, Icons.storage_rounded),
+            const Divider(height: AppSpacing.xl),
+          ],
+          _buildDetailItem('Validity', bundleValidity, Icons.schedule_rounded),
         ],
       ),
     ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.05, end: 0);
   }
 
   Widget _buildAmountDetail(DataOperator operator, DataBundle bundle) {
+    final wizardState = ref.read(dataWizardProvider);
+    final country = wizardState.selectedCountry;
+    
+    // Check if this is Ghana transaction
+    final isGhana = country?.code == 'GH';
+    
     final fxRate = operator.fx?['rate'] as double?;
     final fxCurrencyCode = operator.fx?['currencyCode'] as String?;
     final paymentAmount = fxRate != null ? (bundle.amount * fxRate) : bundle.amount;
-    final paymentCurrency = fxCurrencyCode ?? 'GHS';
+    final paymentCurrency = fxCurrencyCode ?? country?.currencyCode ?? 'GHS';
     
     return Row(
       children: [
@@ -826,12 +967,14 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
               ),
               const SizedBox(height: 4),
               Text(
-                'Bundle: ${bundle.currency}${bundle.amount.toStringAsFixed(2)}',
+                isGhana 
+                    ? 'Bundle: GHS${bundle.amount.toStringAsFixed(2)}'
+                    : 'Bundle: ${bundle.currency}${bundle.amount.toStringAsFixed(2)}',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
               ),
-              if (fxRate != null && fxCurrencyCode != null) ...[
+              if (!isGhana && fxRate != null && fxCurrencyCode != null) ...[
                 const SizedBox(height: 2),
                 Text(
                   'Payment: ${paymentCurrency}${paymentAmount.toStringAsFixed(2)}',

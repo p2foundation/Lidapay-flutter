@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../../data/models/api_models.dart';
 import '../../data/datasources/api_client.dart';
 import '../../presentation/providers/auth_provider.dart';
+import '../utils/ghana_network_codes.dart';
 import '../utils/logger.dart';
 import '../../core/constants/app_constants.dart';
 
@@ -137,7 +138,10 @@ class PaymentService {
   ApiClient get _apiClient => _ref.read(apiClientProvider);
   
   ApiClient get _prymoApiClient {
-    final dio = DioClient.createPrymoDio();
+    final prefs = _ref.read(sharedPreferencesProvider);
+    final dio = DioClient.createPrymoDio(
+      getToken: () async => prefs.getString(AppConstants.authTokenKey),
+    );
     return ApiClient.prymoCredit(dio);
   }
 
@@ -426,16 +430,10 @@ class PaymentService {
 
   /// Credit airtime for Ghana using prymo credit endpoint
   Future<PaymentResult> _creditAirtimeGhana(TopupParams params, int maxAttempts) async {
-    // Extract network code from operator ID for Ghana
-    // Map operator IDs to network codes (1-AirtelTigo, 4-MTN, etc.)
-    final networkMap = {
-      150: 4, // MTN Ghana
-      151: 1, // AirtelTigo Ghana
-      152: 6, // Telecel Ghana (formerly Vodafone Ghana)
-      153: 3, // Glo Ghana
-    };
+    // Use the network code from the operator data (from auto-detection)
+    final network = GhanaNetworkCodes.fromOperatorId(params.operatorId);
     
-    final network = networkMap[params.operatorId] ?? 4; // Default to MTN (4)
+    AppLogger.info('📱 Using network code: $network (${GhanaNetworkCodes.getNetworkName(network)}) for airtime credit', 'PaymentService');
     
     // Remove country code from recipient number for Ghana
     String recipientNumber = params.recipientNumber;
@@ -453,13 +451,26 @@ class PaymentService {
         // Prepare request for prymo credit endpoint
         final request = {
           'recipientNumber': recipientNumber,
-          'amount': params.amount.toStringAsFixed(0), // Send as string without decimal
+          'amount': params.amount, // Send as number
           'network': network,
         };
 
-        final response = await _prymoApiClient.prymoCreditAirtime(request);
+        final requestUrl = '${AppConstants.apiBaseUrl}/api/v1/airtime/topup';
+        AppLogger.info(
+          '📤 Ghana airtime topup POST => $requestUrl',
+          'PaymentService',
+        );
+        AppLogger.info('📦 Ghana airtime topup body: $request', 'PaymentService');
+
+        final response = await _prymoApiClient.prymoCreditAirtime(
+          request,
+        );
         
-        if (response.statusCode == 201) {
+        // Log response
+        AppLogger.info('📥 Ghana airtime topup RESPONSE[${response.response.statusCode}]', 'PaymentService');
+        AppLogger.info('📊 Response data: ${response.data}', 'PaymentService');
+        
+        if (response.response.statusCode == 201) {
           final data = response.data as Map<String, dynamic>?;
           final status = data?['status']?.toString().toUpperCase() ?? '';
           final statusCode = data?['status-code']?.toString();
@@ -477,7 +488,9 @@ class PaymentService {
           } else {
             // Handle failure response from prymo
             final message = data?['message']?.toString() ?? 'Airtime top-up failed';
+            final errorDetails = data?.toString();
             AppLogger.warning('⚠️ Prymo credit failed: $message', 'PaymentService');
+            AppLogger.warning('⚠️ Full error response: $errorDetails', 'PaymentService');
             
             if (attempt < maxAttempts && (status == 'PENDING' || status == 'PROCESSING')) {
               await Future.delayed(const Duration(seconds: 4));
@@ -489,10 +502,11 @@ class PaymentService {
               success: false,
               message: message,
               errorCode: statusCode ?? data?['status-code']?.toString() ?? 'CREDIT_FAILED',
+              data: data, // Include error data for debugging
             );
           }
         } else {
-          throw Exception('HTTP ${response.statusCode}: ${response.statusMessage}');
+          throw Exception('HTTP ${response.response.statusCode}: ${response.response.statusMessage}');
         }
       } catch (e) {
         final rawMessage = _extractErrorMessage(e);
@@ -525,16 +539,10 @@ class PaymentService {
 
   /// Credit data bundle for Ghana using prymo credit endpoint
   Future<PaymentResult> _creditDataGhana(TopupParams params, int maxAttempts) async {
-    // Extract network code from operator ID for Ghana
-    // Map operator IDs to network codes (1-AirtelTigo, 4-MTN, etc.)
-    final networkMap = {
-      150: 4, // MTN Ghana
-      151: 1, // AirtelTigo Ghana
-      152: 6, // Telecel Ghana (formerly Vodafone Ghana)
-      153: 3, // Glo Ghana
-    };
+    // Use the network code from the operator data (from auto-detection)
+    final network = GhanaNetworkCodes.fromOperatorId(params.operatorId);
     
-    final network = networkMap[params.operatorId] ?? 4; // Default to MTN (4)
+    AppLogger.info('📶 Using network code: $network (${GhanaNetworkCodes.getNetworkName(network)}) for data credit', 'PaymentService');
     
     // Remove country code from recipient number for Ghana
     String recipientNumber = params.recipientNumber;
@@ -552,14 +560,27 @@ class PaymentService {
         // Prepare request for prymo data credit endpoint
         final request = {
           'recipientNumber': recipientNumber,
-          'amount': params.amount.toStringAsFixed(0), // Send as string without decimal
+          'dataCode': params.dataCode ?? params.bundleId ?? '', // Use dataCode (plan_id) from bundle list
           'network': network,
-          'bundleId': params.bundleId ?? '', // Include bundle ID for data
+          'amount': params.amount, // Send amount as number
         };
-
-        final response = await _prymoApiClient.prymoCreditData(request);
         
-        if (response.statusCode == 201) {
+        final requestUrl = '${AppConstants.apiBaseUrl}/api/v1/internet/buydata';
+        AppLogger.info(
+          '📶 Ghana data bundle POST => $requestUrl',
+          'PaymentService',
+        );
+        AppLogger.info('📦 Ghana data bundle body: $request', 'PaymentService');
+
+        final response = await _prymoApiClient.prymoCreditData(
+          request,
+        );
+        
+        // Log response
+        AppLogger.info('📥 Ghana data bundle RESPONSE[${response.response.statusCode}]', 'PaymentService');
+        AppLogger.info('📊 Response data: ${response.data}', 'PaymentService');
+        
+        if (response.response.statusCode == 201) {
           final data = response.data as Map<String, dynamic>?;
           final status = data?['status']?.toString().toUpperCase() ?? '';
           final statusCode = data?['status-code']?.toString();
@@ -592,7 +613,7 @@ class PaymentService {
             );
           }
         } else {
-          throw Exception('HTTP ${response.statusCode}: ${response.statusMessage}');
+          throw Exception('HTTP ${response.response.statusCode}: ${response.response.statusMessage}');
         }
       } catch (e) {
         final rawMessage = _extractErrorMessage(e);
@@ -656,7 +677,7 @@ class PaymentService {
             senderCountryCode: params.senderCountryCode,
             recipientEmail: params.recipientEmail,
             customIdentifier: customIdentifier,
-            bundleId: params.bundleId ?? 0,
+            bundleId: int.tryParse(params.bundleId ?? '0') ?? 0,
             amount: params.amount,
             userName: params.senderNumber, // Required by API - user's phone number
           ),
@@ -719,25 +740,42 @@ class PaymentService {
   /// Fetch data bundles for Ghana using Prymo API
   Future<List<Map<String, dynamic>>> fetchGhanaDataBundles(int networkCode) async {
     try {
-      AppLogger.info('📶 Fetching Ghana data bundles for network: $networkCode', 'PaymentService');
+      AppLogger.info('📶 Fetching Ghana data bundles for network: $networkCode (${GhanaNetworkCodes.getNetworkName(networkCode)})', 'PaymentService');
+      
+      // Prepare request with network parameter
+      final request = {
+        'network': networkCode,
+      };
+      
+      final requestUrl = '${AppConstants.apiBaseUrl}/api/v1/internet/bundlelist';
+      AppLogger.info('📶 Ghana data bundle list POST => $requestUrl', 'PaymentService');
+      AppLogger.info('📦 Ghana bundle list body: $request', 'PaymentService');
       
       final response = await _prymoApiClient.prymoDataBundleList(
-        AppConstants.prymoApiKey,
-        AppConstants.prymoApiSecret,
-        networkCode,
+        request,
       );
       
-      if (response.statusCode == 200) {
+      // Log response
+      AppLogger.info('📥 Ghana bundle list RESPONSE[${response.response.statusCode}]', 'PaymentService');
+      AppLogger.info('📊 Response data keys: ${response.data?.keys.toList()}', 'PaymentService');
+      
+      if (response.response.statusCode == 200 || response.response.statusCode == 201) {
         final data = response.data as Map<String, dynamic>?;
-        final bundles = data?['data'] as List<dynamic>? ?? [];
+        final bundles = data?['bundles'] as List<dynamic>? ?? [];
         
         // Convert to list of maps
         final bundleList = bundles.map((bundle) => bundle as Map<String, dynamic>).toList();
         
         AppLogger.info('✅ Retrieved ${bundleList.length} data bundles for Ghana', 'PaymentService');
+        
+        // Log first few bundles for debugging
+        if (bundleList.isNotEmpty) {
+          AppLogger.info('📦 Sample bundles: ${bundleList.take(3).map((b) => '${b['plan_name']} - GHS${b['price']}').toList()}', 'PaymentService');
+        }
+        
         return bundleList;
       } else {
-        throw Exception('Failed to fetch data bundles: HTTP ${response.statusCode}');
+        throw Exception('Failed to fetch data bundles: HTTP ${response.response.statusCode}');
       }
     } catch (e) {
       AppLogger.error('Failed to fetch Ghana data bundles', e, null, 'PaymentService');
@@ -1066,7 +1104,12 @@ class PaymentService {
     return lower.contains('try again later') ||
         lower.contains('asynchronous top-up failed') ||
         lower.contains('temporarily unavailable') ||
-        lower.contains('timeout');
+        lower.contains('timeout') ||
+        lower.contains('network error') ||
+        lower.contains('connection') ||
+        lower.contains('please try again') ||
+        lower.contains('service unavailable') ||
+        lower.contains('rate limit');
   }
 }
 

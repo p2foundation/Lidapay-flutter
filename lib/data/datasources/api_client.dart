@@ -15,7 +15,9 @@ abstract class ApiClient {
   factory ApiClient(Dio dio, {String? baseUrl}) = _ApiClient;
   
   // Factory for prymo credit endpoint with different base URL
-  factory ApiClient.prymoCredit(Dio dio) = _ApiClient.prymoCredit;
+  factory ApiClient.prymoCredit(Dio dio) {
+    return _ApiClient(dio, baseUrl: AppConstants.apiBaseUrl);
+  }
 
   // Authentication
   @POST('${AppConstants.apiVersion}/users/register')
@@ -54,19 +56,21 @@ abstract class ApiClient {
 
   // Airtime - Prymo Credit Ghana (for post-payment crediting)
   @POST('/api/v1/airtime/topup')
-  Future<HttpResponse<dynamic>> prymoCreditAirtime(@Body() Map<String, dynamic> request);
+  Future<HttpResponse<dynamic>> prymoCreditAirtime(
+    @Body() Map<String, dynamic> request,
+  );
 
   // Data Bundles - Prymo Ghana (bundle listing)
-  @GET('/TopUpApi/dataBundleList')
+  @POST('/api/v1/internet/bundlelist')
   Future<HttpResponse<dynamic>> prymoDataBundleList(
-    @Header('ApiKey') String apiKey,
-    @Header('ApiSecret') String apiSecret,
-    @Query('network') int network,
+    @Body() Map<String, dynamic> request,
   );
 
   // Data Bundles - Prymo Credit Ghana (for post-payment crediting)
-  @POST('/TopUpApi/dataCredit')
-  Future<HttpResponse<dynamic>> prymoCreditData(@Body() Map<String, dynamic> request);
+  @POST('/api/v1/internet/buydata')
+  Future<HttpResponse<dynamic>> prymoCreditData(
+    @Body() Map<String, dynamic> request,
+  );
 
   // Data Bundles - Reloadly Global
   @POST('${AppConstants.apiVersion}/data/reloadly')
@@ -206,10 +210,10 @@ class DioClient {
     return dio;
   }
   
-  static Dio createPrymoDio() {
+  static Dio createPrymoDio({Future<String?> Function()? getToken}) {
     final dio = Dio(
       BaseOptions(
-        baseUrl: 'https://tppgh.myone4all.com',
+        baseUrl: AppConstants.apiBaseUrl,
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 15),
         headers: {
@@ -219,7 +223,10 @@ class DioClient {
       ),
     );
 
-    // Only add logging and retry interceptors for prymo
+    // Add auth interceptor if token getter provided
+    if (getToken != null) {
+      dio.interceptors.add(AuthInterceptor(getToken));
+    }
     dio.interceptors.add(LoggingInterceptor());
     dio.interceptors.add(RetryInterceptor());
 

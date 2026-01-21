@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../presentation/features/onboarding/screens/onboarding_screen.dart';
 import '../../presentation/features/auth/screens/login_screen.dart';
 import '../../presentation/features/auth/screens/register_screen_v2.dart';
@@ -47,11 +48,30 @@ import '../../presentation/features/payment/screens/payment_callback_screen.dart
 import '../../presentation/features/payment/screens/payment_receipt_screen.dart';
 import '../../presentation/features/ai/screens/ai_chat_screen.dart';
 import '../../data/models/api_models.dart';
+import '../../core/constants/app_constants.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
+  // Determine initial location based on onboarding completion
+  Future<String> getInitialLocation() async {
+    final prefs = await SharedPreferences.getInstance();
+    final onboardingCompleted = prefs.getBool(AppConstants.onboardingCompletedKey) ?? false;
+    return onboardingCompleted ? '/login' : '/onboarding';
+  }
+  
   return GoRouter(
-    initialLocation: '/onboarding',
+    initialLocation: '/onboarding', // This will be overridden by redirect
     debugLogDiagnostics: kDebugMode,
+    redirect: (context, state) async {
+      // Only check onboarding for the root route
+      if (state.matchedLocation == '/onboarding') {
+        final prefs = await SharedPreferences.getInstance();
+        final onboardingCompleted = prefs.getBool(AppConstants.onboardingCompletedKey) ?? false;
+        if (onboardingCompleted) {
+          return '/login';
+        }
+      }
+      return null;
+    },
     routes: [
       // Onboarding Route
       GoRoute(

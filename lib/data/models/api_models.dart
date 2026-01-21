@@ -1211,6 +1211,7 @@ class DataBundle with _$DataBundle {
     String? validity,
     double? dataAmount,
     Map<String, dynamic>? metadata,
+    String? planId, // Add planId for Ghana data bundles
   }) = _DataBundle;
 
   factory DataBundle.fromJson(Map<String, dynamic> json) =>
@@ -1403,7 +1404,8 @@ class TopupParams with _$TopupParams {
     required String transType, // 'GLOBALAIRTOPUP' or 'GLOBALDATATOPUP'
     required String customerEmail,
     String? customIdentifier,
-    int? bundleId, // For data bundles
+    String? bundleId, // For data bundles (as plan_id string)
+    String? dataCode, // For Ghana data bundles - plan_id from bundle list
   }) = _TopupParams;
 
   factory TopupParams.fromJson(Map<String, dynamic> json) =>
