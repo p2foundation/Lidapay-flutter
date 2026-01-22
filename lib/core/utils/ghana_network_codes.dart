@@ -18,12 +18,41 @@ class GhanaNetworkCodes {
 
   // Mapping from operator IDs to network codes
   static const Map<int, int> _operatorIdToNetworkCode = {
+    // MTN Ghana
     150: mtn,          // MTN Ghana
-    151: airtelTigo,    // AirtelTigo Ghana
-    152: telecel,       // Telecel Ghana (formerly Vodafone Ghana)
-    153: glo,           // Glo Ghana
     643: mtn,           // MTN Ghana Data
+    
+    // AirtelTigo Ghana
+    151: airtelTigo,    // AirtelTigo Ghana
+    642: airtelTigo,    // AirtelTigo Ghana Data
+    
+    // Telecel Ghana (formerly Vodafone)
+    152: telecel,       // Telecel Ghana
     770: telecel,       // Telecel Ghana Data
+    
+    // Glo Ghana
+    153: glo,           // Glo Ghana
+    644: glo,           // Glo Ghana Data
+    
+    // Expresso
+    154: expresso,      // Expresso Ghana
+    645: expresso,      // Expresso Ghana Data
+    
+    // Busy
+    155: busy,          // Busy Ghana
+    646: busy,          // Busy Ghana Data
+    
+    // Surfline
+    156: surfline,      // Surfline Ghana
+    647: surfline,      // Surfline Ghana Data
+    
+    // TiGO (separate from AirtelTigo)
+    157: tigo,          // TiGO Ghana
+    648: tigo,          // TiGO Ghana Data
+    
+    // MTN Yellow
+    158: mtnYellow,     // MTN Yellow Ghana
+    649: mtnYellow,     // MTN Yellow Ghana Data
   };
 
   // Get network code from operator ID

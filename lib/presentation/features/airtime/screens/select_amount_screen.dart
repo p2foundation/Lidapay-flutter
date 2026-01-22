@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_back_button.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/utils/currency_formatter.dart';
 import '../../../../data/models/api_models.dart';
 import '../../../providers/airtime_wizard_provider.dart';
 import '../../../../core/widgets/custom_bottom_nav.dart';
@@ -320,20 +322,24 @@ class _SelectAmountScreenState extends ConsumerState<SelectAmountScreen> {
 
   Widget _buildAmountInput(BuildContext context, AutodetectData operatorData, double minAmount, double maxAmount, double? amount) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final senderSymbol = operatorData.senderCurrencySymbol;
+    final wizardState = ref.read(airtimeWizardProvider);
+    final selectedCountry = wizardState.selectedCountry;
+    
+    // Use Ghana Cedis for Ghana, otherwise use sender currency
+    final currencySymbol = CurrencyFormatter.isGhana(selectedCountry) ? 'GHS' : operatorData.senderCurrencySymbol;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkCard : Colors.white,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         boxShadow: AppShadows.sm,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Amount',
+            'Enter amount',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
@@ -341,17 +347,18 @@ class _SelectAmountScreenState extends ConsumerState<SelectAmountScreen> {
           const SizedBox(height: AppSpacing.md),
           TextField(
             controller: _amountController,
-            keyboardType: TextInputType.number,
+            keyboardType: const TextInputType.numberWithOptions(decimal: false),
+            textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
             onChanged: (value) {
-              setState(() {
-                _selectedPreset = double.tryParse(value);
-              });
-              final amount = double.tryParse(value);
-              if (amount != null) {
-                ref.read(airtimeWizardProvider.notifier).setAmount(amount);
+              final parsed = double.tryParse(value);
+              if (parsed != null) {
+                setState(() {
+                  _selectedPreset = null;
+                });
+                ref.read(airtimeWizardProvider.notifier).setAmount(parsed);
               }
             },
             decoration: InputDecoration(
@@ -359,7 +366,7 @@ class _SelectAmountScreenState extends ConsumerState<SelectAmountScreen> {
               hintStyle: TextStyle(
                 color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
               ),
-              prefixText: '$senderSymbol ',
+              prefixText: currencySymbol,
               prefixStyle: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
                   ),
@@ -369,19 +376,29 @@ class _SelectAmountScreenState extends ConsumerState<SelectAmountScreen> {
                 borderRadius: BorderRadius.circular(AppRadius.md),
                 borderSide: BorderSide.none,
               ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                borderSide: BorderSide(
+                  color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                borderSide: const BorderSide(color: AppColors.primary, width: 2),
+              ),
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Min: $senderSymbol${minAmount.toStringAsFixed(0)} • Max: $senderSymbol${maxAmount.toStringAsFixed(0)}',
+            'Min: $currencySymbol${minAmount.toStringAsFixed(0)} • Max: $currencySymbol${maxAmount.toStringAsFixed(0)}',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
                 ),
           ),
-          if (amount != null && amount > 0 && operatorData.fx != null) ...[
+          if (amount != null && amount > 0 && operatorData.fx != null && !CurrencyFormatter.isGhana(selectedCountry)) ...[
             const SizedBox(height: AppSpacing.sm),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: AppColors.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -397,14 +414,18 @@ class _SelectAmountScreenState extends ConsumerState<SelectAmountScreen> {
           ],
         ],
       ),
-    ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.05, end: 0);
+    ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.2, end: 0);
   }
 
   Widget _buildQuickAmounts(BuildContext context, List<double> allAmounts, AutodetectData operatorData) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final displayAmounts = _getDisplayAmounts(allAmounts);
     final hasMoreAmounts = allAmounts.length > _initialAmountCount;
-    final currencyCode = operatorData.senderCurrencyCode;
+    final wizardState = ref.read(airtimeWizardProvider);
+    final selectedCountry = wizardState.selectedCountry;
+    
+    // Use Ghana Cedis for Ghana, otherwise use sender currency code
+    final currencyCode = CurrencyFormatter.isGhana(selectedCountry) ? 'GHS' : operatorData.senderCurrencyCode;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

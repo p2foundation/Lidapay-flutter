@@ -433,7 +433,7 @@ class PaymentService {
     // Use the network code from the operator data (from auto-detection)
     final network = GhanaNetworkCodes.fromOperatorId(params.operatorId);
     
-    AppLogger.info('📱 Using network code: $network (${GhanaNetworkCodes.getNetworkName(network)}) for airtime credit', 'PaymentService');
+    AppLogger.info('📱 Operator ID: ${params.operatorId} -> Network code: $network (${GhanaNetworkCodes.getNetworkName(network)}) for airtime credit', 'PaymentService');
     
     // Remove country code from recipient number for Ghana
     String recipientNumber = params.recipientNumber;
@@ -542,7 +542,7 @@ class PaymentService {
     // Use the network code from the operator data (from auto-detection)
     final network = GhanaNetworkCodes.fromOperatorId(params.operatorId);
     
-    AppLogger.info('📶 Using network code: $network (${GhanaNetworkCodes.getNetworkName(network)}) for data credit', 'PaymentService');
+    AppLogger.info('📶 Operator ID: ${params.operatorId} -> Network code: $network (${GhanaNetworkCodes.getNetworkName(network)}) for data credit', 'PaymentService');
     
     // Remove country code from recipient number for Ghana
     String recipientNumber = params.recipientNumber;
