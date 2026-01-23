@@ -14,6 +14,7 @@ import '../../../providers/airtime_wizard_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../../core/widgets/custom_bottom_nav.dart';
 import '../../../../core/widgets/country_flag_widget.dart';
+import '../../../../core/utils/ghana_network_codes.dart';
 
 class ConfirmAirtimeScreen extends ConsumerStatefulWidget {
   const ConfirmAirtimeScreen({super.key});
@@ -298,6 +299,10 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
     // Generate unique reference
     final payTransRef = generatePaymentReference();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
+    
+    // Get selected Ghana network code
+    final wizardState = ref.read(airtimeWizardProvider);
+    final selectedGhanaNetwork = wizardState.selectedGhanaNetworkCode;
 
     // Prepare topup params for after-payment crediting
     final topupParams = TopupParams(
@@ -313,6 +318,7 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
       transType: 'PRYMOAIRTIME', // Use Prymo transaction type
       customerEmail: user?.email ?? '',
       customIdentifier: 'prymo-airtime $timestamp',
+      ghanaNetworkCode: selectedGhanaNetwork,
     );
 
     setState(() {
@@ -590,6 +596,15 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
     final paymentCurrency = isGhana ? 'GHS' : (fxCurrencyCode ?? country?.currencyCode ?? 'GHS');
     final senderCurrency = isGhana ? 'GHS' : (operatorData?.senderCurrencyCode ?? 'USD');
     
+    // Get the display network name (for Ghana, use selected network if not auto-detect)
+    String displayOperatorName = operatorData?.name ?? '';
+    if (isGhana) {
+      final selectedGhanaNetwork = wizardState.selectedGhanaNetworkCode;
+      if (selectedGhanaNetwork != null && selectedGhanaNetwork != GhanaNetworkCodes.unknown) {
+        displayOperatorName = GhanaNetworkCodes.getNetworkName(selectedGhanaNetwork);
+      }
+    }
+    
     // Set flag before navigation to prevent redirect to select country
     setState(() {
       _isNavigatingToReceipt = true;
@@ -607,7 +622,7 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
       'paymentAmount': paymentAmount,
       'paymentCurrency': paymentCurrency,
       'recipientNumber': phoneNumber ?? '',
-      'operatorName': operatorData?.name ?? '',
+      'operatorName': displayOperatorName,
       'countryName': country?.name ?? '',
       'bundleName': null,
       'timestamp': DateTime.now(),
@@ -630,6 +645,15 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
     final paymentCurrency = isGhana ? 'GHS' : (fxCurrencyCode ?? country?.currencyCode ?? 'GHS');
     final senderCurrency = isGhana ? 'GHS' : (operatorData?.senderCurrencyCode ?? 'USD');
 
+    // Get the display network name (for Ghana, use selected network if not auto-detect)
+    String displayOperatorName = operatorData?.name ?? '';
+    if (isGhana) {
+      final selectedGhanaNetwork = wizardState.selectedGhanaNetworkCode;
+      if (selectedGhanaNetwork != null && selectedGhanaNetwork != GhanaNetworkCodes.unknown) {
+        displayOperatorName = GhanaNetworkCodes.getNetworkName(selectedGhanaNetwork);
+      }
+    }
+
     // Set flag before navigation to prevent redirect to select country
     setState(() {
       _isNavigatingToReceipt = true;
@@ -646,7 +670,7 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
       'paymentAmount': paymentAmount,
       'paymentCurrency': paymentCurrency,
       'recipientNumber': phoneNumber ?? '',
-      'operatorName': operatorData?.name ?? '',
+      'operatorName': displayOperatorName,
       'countryName': country?.name ?? '',
       'bundleName': null,
       'errorMessage': message,
@@ -958,6 +982,19 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
   }
 
   Widget _buildDetailItemWithLogo(String label, String value, AutodetectData operatorData, Country country) {
+    // For Ghana, check if a specific network is selected
+    String displayNetwork = value;
+    if (country.code == 'GH') {
+      final wizardState = ref.watch(airtimeWizardProvider);
+      final selectedGhanaNetwork = wizardState.selectedGhanaNetworkCode;
+
+      if (selectedGhanaNetwork != null) {
+        displayNetwork = selectedGhanaNetwork == GhanaNetworkCodes.unknown
+            ? GhanaNetworkCodes.getNetworkName(GhanaNetworkCodes.unknown)
+            : GhanaNetworkCodes.getNetworkName(selectedGhanaNetwork);
+      }
+    }
+    
     return Row(
       children: [
         // Operator Logo or fallback icon
@@ -1014,7 +1051,7 @@ class _ConfirmAirtimeScreenState extends ConsumerState<ConfirmAirtimeScreen> wit
               ),
               const SizedBox(height: 2),
               Text(
-                value,
+                displayNetwork,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),

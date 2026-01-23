@@ -430,10 +430,13 @@ class PaymentService {
 
   /// Credit airtime for Ghana using prymo credit endpoint
   Future<PaymentResult> _creditAirtimeGhana(TopupParams params, int maxAttempts) async {
-    // Use the network code from the operator data (from auto-detection)
-    final network = GhanaNetworkCodes.fromOperatorId(params.operatorId);
+    // Use the selected network code if available, otherwise fall back to operator ID
+    final network = params.ghanaNetworkCode ?? GhanaNetworkCodes.fromOperatorId(params.operatorId);
     
     AppLogger.info('📱 Operator ID: ${params.operatorId} -> Network code: $network (${GhanaNetworkCodes.getNetworkName(network)}) for airtime credit', 'PaymentService');
+    if (params.ghanaNetworkCode != null) {
+      AppLogger.info('📱 Using user-selected Ghana network code: ${params.ghanaNetworkCode}', 'PaymentService');
+    }
     
     // Remove country code from recipient number for Ghana
     String recipientNumber = params.recipientNumber;

@@ -7,6 +7,7 @@ class AirtimeWizardState {
   final AutodetectData? operatorData;
   final double? selectedAmount;
   final String? customIdentifier;
+  final int? selectedGhanaNetworkCode;
 
   AirtimeWizardState({
     this.selectedCountry,
@@ -14,6 +15,7 @@ class AirtimeWizardState {
     this.operatorData,
     this.selectedAmount,
     this.customIdentifier,
+    this.selectedGhanaNetworkCode,
   });
 
   AirtimeWizardState copyWith({
@@ -22,11 +24,13 @@ class AirtimeWizardState {
     AutodetectData? operatorData,
     double? selectedAmount,
     String? customIdentifier,
+    int? selectedGhanaNetworkCode,
     bool clearCountry = false,
     bool clearPhone = false,
     bool clearOperator = false,
     bool clearAmount = false,
     bool clearIdentifier = false,
+    bool clearGhanaNetwork = false,
   }) {
     return AirtimeWizardState(
       selectedCountry: clearCountry ? null : (selectedCountry ?? this.selectedCountry),
@@ -34,6 +38,7 @@ class AirtimeWizardState {
       operatorData: clearOperator ? null : (operatorData ?? this.operatorData),
       selectedAmount: clearAmount ? null : (selectedAmount ?? this.selectedAmount),
       customIdentifier: clearIdentifier ? null : (customIdentifier ?? this.customIdentifier),
+      selectedGhanaNetworkCode: clearGhanaNetwork ? null : (selectedGhanaNetworkCode ?? this.selectedGhanaNetworkCode),
     );
   }
 
@@ -51,11 +56,12 @@ class AirtimeWizardNotifier extends StateNotifier<AirtimeWizardState> {
       clearPhone: true,
       clearOperator: true,
       clearAmount: true,
+      clearGhanaNetwork: true,
     );
   }
 
   void setPhoneNumber(String phone) {
-    state = state.copyWith(phoneNumber: phone, clearOperator: true, clearAmount: true);
+    state = state.copyWith(phoneNumber: phone, clearOperator: true, clearAmount: true, clearGhanaNetwork: true);
   }
 
   void setOperatorData(AutodetectData data) {
@@ -68,6 +74,10 @@ class AirtimeWizardNotifier extends StateNotifier<AirtimeWizardState> {
 
   void setCustomIdentifier(String identifier) {
     state = state.copyWith(customIdentifier: identifier);
+  }
+
+  void setSelectedGhanaNetwork(int networkCode) {
+    state = state.copyWith(selectedGhanaNetworkCode: networkCode);
   }
 
   void reset() {

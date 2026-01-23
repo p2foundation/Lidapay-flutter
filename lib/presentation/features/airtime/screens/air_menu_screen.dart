@@ -265,6 +265,7 @@ class _AirMenuScreenState extends State<AirMenuScreen>
       ),
       child: SafeArea(
         bottom: false,
+        minimum: const EdgeInsets.only(top: AppSpacing.sm),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
@@ -610,6 +611,7 @@ class _AirMenuScreenState extends State<AirMenuScreen>
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
             child: Row(
               children: [
                 ServiceCard(
@@ -669,12 +671,13 @@ class _AirMenuScreenState extends State<AirMenuScreen>
                   isCompact: true,
                   onTap: () => _showComingSoon(context, 'Favorites'),
                 ),
+                const SizedBox(width: AppSpacing.lg), // End padding
               ],
             ),
           ),
-        ],
-      ),
-    ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.1, end: 0);
+      ],
+    ),
+  ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.1, end: 0);
   }
 
   Widget _buildAllServices(BuildContext context) {

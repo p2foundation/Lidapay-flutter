@@ -1406,6 +1406,7 @@ class TopupParams with _$TopupParams {
     String? customIdentifier,
     String? bundleId, // For data bundles (as plan_id string)
     String? dataCode, // For Ghana data bundles - plan_id from bundle list
+    int? ghanaNetworkCode, // For Ghana network selection
   }) = _TopupParams;
 
   factory TopupParams.fromJson(Map<String, dynamic> json) =>

@@ -172,6 +172,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
+        minimum: const EdgeInsets.only(top: AppSpacing.sm),
         child: Column(
           children: [
             _buildHeader(context, isDark),

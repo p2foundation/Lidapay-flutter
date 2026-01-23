@@ -12,6 +12,7 @@ import '../../../providers/airtime_wizard_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../../core/widgets/custom_bottom_nav.dart';
 import '../../../../core/widgets/country_flag_widget.dart';
+import '../../../../core/utils/ghana_network_codes.dart';
 
 class EnterPhoneScreen extends ConsumerStatefulWidget {
   const EnterPhoneScreen({super.key});
@@ -25,6 +26,7 @@ class _EnterPhoneScreenState extends ConsumerState<EnterPhoneScreen> {
   bool _isDetecting = false;
   AutodetectData? _detectedOperator;
   String? _error;
+  int? _selectedGhanaNetwork;
 
   Timer? _detectDebounce;
   int _detectSeq = 0; // used to ignore stale autodetect responses
@@ -38,6 +40,9 @@ class _EnterPhoneScreenState extends ConsumerState<EnterPhoneScreen> {
     }
     if (wizardState.operatorData != null) {
       _detectedOperator = wizardState.operatorData;
+    }
+    if (wizardState.selectedGhanaNetworkCode != null) {
+      _selectedGhanaNetwork = wizardState.selectedGhanaNetworkCode;
     }
   }
 
@@ -77,6 +82,8 @@ class _EnterPhoneScreenState extends ConsumerState<EnterPhoneScreen> {
       _isDetecting = true;
       _error = null;
       _detectedOperator = null;
+      // Reset Ghana network selection when phone changes
+      _selectedGhanaNetwork = null;
     });
 
     try {
@@ -171,6 +178,13 @@ class _EnterPhoneScreenState extends ConsumerState<EnterPhoneScreen> {
 
   void _continue() {
     if (_detectedOperator != null) {
+      final country = ref.read(airtimeWizardProvider).selectedCountry;
+      if (country?.code == 'GH' && _selectedGhanaNetwork == null) {
+        setState(() {
+          _error = 'Please select the operating network.';
+        });
+        return;
+      }
       context.push('/airtime/select-amount');
     }
   }
@@ -216,6 +230,11 @@ class _EnterPhoneScreenState extends ConsumerState<EnterPhoneScreen> {
                     if (_detectedOperator != null) ...[
                       const SizedBox(height: AppSpacing.md),
                       _buildOperatorInfo(context),
+                      // Add Ghana network selection if country is Ghana
+                      if (selectedCountry.code == 'GH') ...[
+                        const SizedBox(height: AppSpacing.md),
+                        _buildGhanaNetworkSelection(context),
+                      ],
                     ],
                     if (_error != null) ...[
                       const SizedBox(height: AppSpacing.md),
@@ -420,6 +439,7 @@ class _EnterPhoneScreenState extends ConsumerState<EnterPhoneScreen> {
                     setState(() {
                       _detectedOperator = null;
                       _error = null;
+                      _selectedGhanaNetwork = null;
                     });
                     // Auto-detect after a delay
                     _detectDebounce?.cancel();
@@ -448,6 +468,7 @@ class _EnterPhoneScreenState extends ConsumerState<EnterPhoneScreen> {
                               setState(() {
                                 _detectedOperator = null;
                                 _error = null;
+                                _selectedGhanaNetwork = null;
                               });
                             },
                           )
@@ -589,8 +610,144 @@ class _EnterPhoneScreenState extends ConsumerState<EnterPhoneScreen> {
     );
   }
 
+  Widget _buildGhanaNetworkSelection(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // Define available Ghana networks with their logo paths
+    final networks = [
+      {'code': GhanaNetworkCodes.unknown, 'name': GhanaNetworkCodes.getNetworkName(GhanaNetworkCodes.unknown), 'logo': GhanaNetworkCodes.getNetworkLogoAsset(GhanaNetworkCodes.unknown)},
+      {'code': GhanaNetworkCodes.airtelTigo, 'name': GhanaNetworkCodes.getNetworkName(GhanaNetworkCodes.airtelTigo), 'logo': GhanaNetworkCodes.getNetworkLogoAsset(GhanaNetworkCodes.airtelTigo)},
+      {'code': GhanaNetworkCodes.expresso, 'name': GhanaNetworkCodes.getNetworkName(GhanaNetworkCodes.expresso), 'logo': GhanaNetworkCodes.getNetworkLogoAsset(GhanaNetworkCodes.expresso)},
+      {'code': GhanaNetworkCodes.glo, 'name': GhanaNetworkCodes.getNetworkName(GhanaNetworkCodes.glo), 'logo': GhanaNetworkCodes.getNetworkLogoAsset(GhanaNetworkCodes.glo)},
+      {'code': GhanaNetworkCodes.mtn, 'name': GhanaNetworkCodes.getNetworkName(GhanaNetworkCodes.mtn), 'logo': GhanaNetworkCodes.getNetworkLogoAsset(GhanaNetworkCodes.mtn)},
+      {'code': GhanaNetworkCodes.tigo, 'name': GhanaNetworkCodes.getNetworkName(GhanaNetworkCodes.tigo), 'logo': GhanaNetworkCodes.getNetworkLogoAsset(GhanaNetworkCodes.tigo)},
+      {'code': GhanaNetworkCodes.telecel, 'name': GhanaNetworkCodes.getNetworkName(GhanaNetworkCodes.telecel), 'logo': GhanaNetworkCodes.getNetworkLogoAsset(GhanaNetworkCodes.telecel)},
+      {'code': GhanaNetworkCodes.busy, 'name': GhanaNetworkCodes.getNetworkName(GhanaNetworkCodes.busy), 'logo': GhanaNetworkCodes.getNetworkLogoAsset(GhanaNetworkCodes.busy)},
+      {'code': GhanaNetworkCodes.surfline, 'name': GhanaNetworkCodes.getNetworkName(GhanaNetworkCodes.surfline), 'logo': GhanaNetworkCodes.getNetworkLogoAsset(GhanaNetworkCodes.surfline)},
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : AppColors.lightBg,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.network_check_rounded, color: AppColors.primary, size: 20),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                'Select Operating Network',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Some numbers are ported between networks. Please select the correct operating network.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          // Network pills grid
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: networks.map((network) {
+              final isSelected = _selectedGhanaNetwork == (network['code'] as int);
+              return InkWell(
+                onTap: () {
+                  setState(() {
+                    _selectedGhanaNetwork = network['code'] as int;
+                  });
+                  ref.read(airtimeWizardProvider.notifier).setSelectedGhanaNetwork(_selectedGhanaNetwork!);
+                },
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: isSelected 
+                        ? AppColors.primary.withOpacity(0.1)
+                        : (isDark ? AppColors.darkCard : Colors.white),
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    border: Border.all(
+                      color: isSelected 
+                          ? AppColors.primary
+                          : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                      width: isSelected ? 2 : 1,
+                    ),
+                    boxShadow: isSelected 
+                        ? [BoxShadow(color: AppColors.primary.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))]
+                        : null,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Network logo or icon
+                      Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: isSelected ? AppColors.primary : (isDark ? AppColors.darkSurface : AppColors.lightBg),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                        ),
+                        child: network['logo'] != null && network['logo']!.toString().isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(AppRadius.sm),
+                                child: Image.asset(
+                                  network['logo'] as String,
+                                  width: 24,
+                                  height: 24,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    // Fallback to icon if image not found
+                                    return Icon(
+                                      Icons.sim_card_rounded,
+                                      size: 16,
+                                      color: isSelected ? Colors.white : (isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted),
+                                    );
+                                  },
+                                ),
+                              )
+                            : Icon(
+                                Icons.sim_card_rounded,
+                                size: 16,
+                                color: isSelected ? Colors.white : (isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted),
+                              ),
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      // Network name
+                      Text(
+                        network['name'] as String,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                              color: isSelected 
+                                  ? AppColors.primary
+                                  : (isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    ).animate().fadeIn().slideY(begin: 0.05, end: 0);
+  }
+
   Widget _buildNavigationButtons(BuildContext context) {
-    final canContinue = _detectedOperator != null;
+    final isGhana = ref.read(airtimeWizardProvider).selectedCountry?.code == 'GH';
+    final canContinue = _detectedOperator != null && (!isGhana || _selectedGhanaNetwork != null);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(

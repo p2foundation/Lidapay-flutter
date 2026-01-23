@@ -32,6 +32,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
+        minimum: const EdgeInsets.only(top: AppSpacing.sm),
         child: Column(
           children: [
             // Header
@@ -133,35 +134,40 @@ class _ServicesScreenState extends State<ServicesScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final secondaryText = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Row(
-        children: _categories.asMap().entries.map((entry) {
-          final isSelected = entry.key == _selectedCategory;
-          return Padding(
-            padding: const EdgeInsets.only(right: AppSpacing.sm),
-            child: GestureDetector(
-              onTap: () => setState(() => _selectedCategory = entry.key),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                decoration: BoxDecoration(
-                  color: isSelected ? AppColors.primary : colorScheme.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.full),
-                  boxShadow: isSelected ? AppShadows.softGlow(AppColors.primary) : AppShadows.xs,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            ..._categories.asMap().entries.map((entry) {
+              final isSelected = entry.key == _selectedCategory;
+              return Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.sm),
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedCategory = entry.key),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppColors.primary : colorScheme.surface,
+                      borderRadius: BorderRadius.circular(AppRadius.full),
+                      boxShadow: isSelected ? AppShadows.softGlow(AppColors.primary) : AppShadows.xs,
+                    ),
+                    child: Text(
+                      entry.value,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            color: isSelected ? Colors.white : secondaryText,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ),
                 ),
-                child: Text(
-                  entry.value,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: isSelected ? Colors.white : secondaryText,
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
+              );
+            }),
+            const SizedBox(width: AppSpacing.lg), // End padding
+          ],
+        ),
       ),
     ).animate().fadeIn(delay: 150.ms);
   }

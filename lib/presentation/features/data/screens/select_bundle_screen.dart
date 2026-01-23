@@ -41,6 +41,15 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
         }
       });
     }
+
+    if (_selectedOperator != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _syncGhanaNetworkSelection(_selectedOperator!);
+      });
+    }
   }
 
   void _selectOperator(DataOperator operator) {
@@ -48,6 +57,27 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
       _selectedOperator = operator;
     });
     ref.read(dataWizardProvider.notifier).selectOperator(operator);
+    _syncGhanaNetworkSelection(operator);
+  }
+
+  void _syncGhanaNetworkSelection(DataOperator operator) {
+    final wizardState = ref.read(dataWizardProvider);
+    final country = wizardState.selectedCountry;
+    if (country?.code != 'GH') {
+      return;
+    }
+
+    final selectedNetwork = wizardState.selectedGhanaNetworkCode;
+    if (selectedNetwork != null && selectedNetwork != GhanaNetworkCodes.unknown) {
+      return;
+    }
+
+    final derivedNetwork = GhanaNetworkCodes.fromOperatorId(operator.operatorId);
+    if (derivedNetwork == GhanaNetworkCodes.unknown) {
+      return;
+    }
+
+    ref.read(dataWizardProvider.notifier).setSelectedGhanaNetwork(derivedNetwork);
   }
 
   void _selectBundle(DataBundle bundle) {
@@ -67,11 +97,6 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
     Map<int, Map<String, dynamic>>? operatorMetadata,
     Country? country,
   ) {
-    // Special handling for Ghana bundles
-    if (country?.code == 'GH') {
-      return _generateGhanaBundles(operator);
-    }
-    
     final metadata = operatorMetadata?[operator.operatorId];
     if (metadata == null) {
       return [];
@@ -128,76 +153,67 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
     });
   }
   
-  List<DataBundle> _generateGhanaBundles(DataOperator operator) {
-    final networkCode = GhanaNetworkCodes.fromOperatorId(operator.operatorId);
-    final bundleListAsync = ref.watch(ghanaDataBundlesProvider(networkCode));
-    
-    return bundleListAsync.when(
-      data: (bundles) {
-        return bundles.asMap().entries.map((entry) {
-          final index = entry.key;
-          final bundle = entry.value;
-          
-          // Create user-friendly display name
-          String displayName = bundle['plan_name'] ?? 'Unknown Bundle';
-          final volume = bundle['volume'] ?? '';
-          final price = bundle['price']?.toString() ?? '0';
-          
-          // Format readable name: "7.27 GB - GHS 3.00" or "40.91 MB - GHS 1.00"
-          if (volume.isNotEmpty && !displayName.toLowerCase().contains('ghc')) {
-            // Extract data amount from volume if available
-            if (volume.contains('GB') || volume.contains('MB')) {
-              displayName = "${volume.split(' of ')[0]} - GHS $price";
-            } else {
-              displayName = "$volume - GHS $price";
-            }
-          } else {
-            // Clean up the original name
-            displayName = displayName.replaceAll('_Others', '').replaceAll('_', ' ');
-          }
-          
-          // Format the description to show additional details
-          String description = '';
-          final validity = bundle['validity'];
-          final category = bundle['category'];
-          
-          // Add validity info
-          if (validity != null && validity != 'NO EXPIRY' && validity != '') {
-            description += validity;
-          } else if (validity == 'NO EXPIRY') {
-            description += 'No expiry';
-          }
-          
-          // Add type info for special bundles
-          if (category == 'FLEXI') {
-            if (description.isNotEmpty) description += ' • ';
-            description += 'Flexi amount';
-          }
-          
-          // Add special bundle info
-          if (bundle['plan_name'].toString().toLowerCase().contains('midnight')) {
-            if (description.isNotEmpty) description += ' • ';
-            description += 'Midnight bundle (12AM-8AM)';
-          }
-          
-          return DataBundle(
-            id: index + 1000, // Use unique IDs starting from 1000 to avoid conflicts
-            name: displayName, // User-friendly name for display
-            description: description, // Additional details
-            amount: double.tryParse(bundle['price']?.toString() ?? '0') ?? 0.0,
-            currency: 'GHS',
-            validity: validity,
-            planId: bundle['plan_id'], // Store original plan_id for API call
-            metadata: {
-              ...bundle,
-              'original_name': bundle['plan_name'], // Keep original name for reference
-            },
-          );
-        }).toList();
-      },
-      loading: () => [],
-      error: (_, __) => [],
-    );
+  List<DataBundle> _mapGhanaBundles(List<Map<String, dynamic>> bundles) {
+    return bundles.asMap().entries.map((entry) {
+      final index = entry.key;
+      final bundle = entry.value;
+
+      // Create user-friendly display name
+      String displayName = bundle['plan_name'] ?? 'Unknown Bundle';
+      final volume = bundle['volume'] ?? '';
+      final price = bundle['price']?.toString() ?? '0';
+
+      // Format readable name: "7.27 GB - GHS 3.00" or "40.91 MB - GHS 1.00"
+      if (volume.isNotEmpty && !displayName.toLowerCase().contains('ghc')) {
+        // Extract data amount from volume if available
+        if (volume.contains('GB') || volume.contains('MB')) {
+          displayName = "${volume.split(' of ')[0]} - GHS $price";
+        } else {
+          displayName = "$volume - GHS $price";
+        }
+      } else {
+        // Clean up the original name
+        displayName = displayName.replaceAll('_Others', '').replaceAll('_', ' ');
+      }
+
+      // Format the description to show additional details
+      String description = '';
+      final validity = bundle['validity'];
+      final category = bundle['category'];
+
+      // Add validity info
+      if (validity != null && validity != 'NO EXPIRY' && validity != '') {
+        description += validity;
+      } else if (validity == 'NO EXPIRY') {
+        description += 'No expiry';
+      }
+
+      // Add type info for special bundles
+      if (category == 'FLEXI') {
+        if (description.isNotEmpty) description += ' • ';
+        description += 'Flexi amount';
+      }
+
+      // Add special bundle info
+      if (bundle['plan_name'].toString().toLowerCase().contains('midnight')) {
+        if (description.isNotEmpty) description += ' • ';
+        description += 'Midnight bundle (12AM-8AM)';
+      }
+
+      return DataBundle(
+        id: index + 1000, // Use unique IDs starting from 1000 to avoid conflicts
+        name: displayName, // User-friendly name for display
+        description: description, // Additional details
+        amount: double.tryParse(bundle['price']?.toString() ?? '0') ?? 0.0,
+        currency: 'GHS',
+        validity: validity,
+        planId: bundle['plan_id'], // Store original plan_id for API call
+        metadata: {
+          ...bundle,
+          'original_name': bundle['plan_name'], // Keep original name for reference
+        },
+      );
+    }).toList();
   }
   
   List<DataBundle> _getDisplayBundles(List<DataBundle> allBundles) {
@@ -227,9 +243,44 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
       ),
     );
 
-    final bundles = _selectedOperator != null
+    final isGhana = selectedCountry?.code == 'GH';
+    final selectedNetwork = wizardState.selectedGhanaNetworkCode;
+    final derivedNetwork = isGhana && _selectedOperator != null
+        ? GhanaNetworkCodes.fromOperatorId(_selectedOperator!.operatorId)
+        : null;
+    final networkCode = (selectedNetwork != null && selectedNetwork != GhanaNetworkCodes.unknown)
+        ? selectedNetwork
+        : derivedNetwork;
+
+    AsyncValue<List<Map<String, dynamic>>>? ghanaBundlesAsync;
+    if (isGhana && networkCode != null && networkCode != GhanaNetworkCodes.unknown) {
+      ghanaBundlesAsync = ref.watch(ghanaDataBundlesProvider(networkCode));
+    }
+
+    var bundles = _selectedOperator != null
         ? _generateBundles(_selectedOperator!, wizardState.operatorMetadata, selectedCountry)
         : <DataBundle>[];
+    var isBundlesLoading = false;
+    String? bundleError;
+    String? bundleEmptyMessage;
+
+    if (ghanaBundlesAsync != null) {
+      ghanaBundlesAsync.when(
+        data: (ghanaBundles) {
+          bundles = _mapGhanaBundles(ghanaBundles);
+          if (bundles.isEmpty) {
+            bundleEmptyMessage =
+                'No data bundles available for this network. Please select another network.';
+          }
+        },
+        loading: () {
+          isBundlesLoading = true;
+        },
+        error: (_, __) {
+          bundleError = 'Unable to load data bundles. Please try again.';
+        },
+      );
+    }
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -259,11 +310,18 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
                     ),
                     if (operators.length > 1) ...[
                       const SizedBox(height: AppSpacing.lg),
-                      _buildOperatorSelection(context, operators),
+                      _buildOperatorSelection(context, operators, selectedCountry),
                     ],
                     const SizedBox(height: AppSpacing.lg),
                     if (_selectedOperator != null) ...[
-                      _buildBundlesList(context, bundles),
+                      if (isBundlesLoading)
+                        _buildBundlesLoading(context)
+                      else if (bundleError != null)
+                        _buildBundlesError(context, bundleError!)
+                      else if (bundleEmptyMessage != null)
+                        _buildBundlesEmpty(context, bundleEmptyMessage!)
+                      else
+                        _buildBundlesList(context, bundles),
                     ],
                   ],
                 ),
@@ -275,6 +333,88 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
       ),
       bottomNavigationBar: const CustomBottomNavigationBar(currentIndex: 1),
     );
+  }
+
+  Widget _buildBundlesLoading(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.info.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.info.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              'Loading data bundles...',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.info,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn();
+  }
+
+  Widget _buildBundlesEmpty(BuildContext context, String message) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.info.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.info.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline_rounded, color: AppColors.info, size: 20),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              message,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.info,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn();
+  }
+
+  Widget _buildBundlesError(BuildContext context, String message) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.error.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.error.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline_rounded, color: AppColors.error, size: 20),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              message,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn();
   }
 
   Widget _buildHeader(BuildContext context) {
@@ -381,8 +521,13 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
     );
   }
 
-  Widget _buildOperatorSelection(BuildContext context, List<DataOperator> operators) {
+  Widget _buildOperatorSelection(
+    BuildContext context,
+    List<DataOperator> operators,
+    Country? selectedCountry,
+  ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isGhana = selectedCountry?.code == 'GH';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -396,6 +541,13 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
         const SizedBox(height: AppSpacing.md),
         ...operators.map((operator) {
           final isSelected = _selectedOperator?.id == operator.id;
+          final networkCode = isGhana
+              ? GhanaNetworkCodes.fromOperatorId(operator.operatorId)
+              : null;
+          final localLogo = (isGhana && networkCode != GhanaNetworkCodes.unknown)
+              ? GhanaNetworkCodes.getNetworkLogoAsset(networkCode!)
+              : null;
+          final hasLocalLogo = localLogo != null && localLogo.isNotEmpty;
           return GestureDetector(
             onTap: () => _selectOperator(operator),
             child: Container(
@@ -421,14 +573,14 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
                       color: AppColors.primary.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(AppRadius.md),
                     ),
-                    child: operator.logoUrl != null && operator.logoUrl!.isNotEmpty
+                    child: hasLocalLogo
                         ? ClipRRect(
                             borderRadius: BorderRadius.circular(AppRadius.md),
-                            child: Image.network(
-                              operator.logoUrl!,
+                            child: Image.asset(
+                              localLogo!,
                               width: 48,
                               height: 48,
-                              fit: BoxFit.cover,
+                              fit: BoxFit.contain,
                               errorBuilder: (context, error, stackTrace) {
                                 return Icon(
                                   Icons.wifi_rounded,
@@ -438,7 +590,24 @@ class _SelectBundleScreenState extends ConsumerState<SelectBundleScreen> {
                               },
                             ),
                           )
-                        : Icon(Icons.wifi_rounded, color: AppColors.primary, size: 24),
+                        : (operator.logoUrl != null && operator.logoUrl!.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(AppRadius.md),
+                                child: Image.network(
+                                  operator.logoUrl!,
+                                  width: 48,
+                                  height: 48,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Icon(
+                                      Icons.wifi_rounded,
+                                      color: AppColors.primary,
+                                      size: 24,
+                                    );
+                                  },
+                                ),
+                              )
+                            : Icon(Icons.wifi_rounded, color: AppColors.primary, size: 24)),
                   ),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(

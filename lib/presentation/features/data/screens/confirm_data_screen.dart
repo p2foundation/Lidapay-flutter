@@ -255,6 +255,7 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
     final selectedOperator = wizardState.selectedOperator;
     final selectedBundle = wizardState.selectedBundle;
     final user = ref.read(currentUserProvider).valueOrNull;
+    final selectedGhanaNetwork = wizardState.selectedGhanaNetworkCode;
 
     if (country == null || phoneNumber == null || selectedOperator == null || selectedBundle == null) {
       setState(() {
@@ -276,8 +277,11 @@ class _ConfirmDataScreenState extends ConsumerState<ConfirmDataScreen> with Widg
         throw Exception('User ID not found. Please login again.');
       }
 
-      // Check if this is a Ghana transaction and use direct Prymo flow
-      if (country.code == 'GH' && AppConstants.usePrymoForGhanaData) {
+      // Use Prymo only when a specific Ghana network is selected
+      if (country.code == 'GH' &&
+          AppConstants.usePrymoForGhanaData &&
+          selectedGhanaNetwork != null &&
+          selectedGhanaNetwork != GhanaNetworkCodes.unknown) {
         await _initiateGhanaPayment(userId, user, country, selectedOperator, selectedBundle, phoneNumber);
         return;
       }

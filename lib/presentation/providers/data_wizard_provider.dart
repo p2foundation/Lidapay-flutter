@@ -10,6 +10,7 @@ class DataWizardState {
   final DataBundle? selectedBundle;
   final Map<int, Map<String, dynamic>>? operatorMetadata;
   final String? customIdentifier;
+  final int? selectedGhanaNetworkCode;
 
   DataWizardState({
     this.selectedCountry,
@@ -20,6 +21,7 @@ class DataWizardState {
     this.selectedBundle,
     this.operatorMetadata,
     this.customIdentifier,
+    this.selectedGhanaNetworkCode,
   });
 
   DataWizardState copyWith({
@@ -31,6 +33,7 @@ class DataWizardState {
     DataBundle? selectedBundle,
     Map<int, Map<String, dynamic>>? operatorMetadata,
     String? customIdentifier,
+    int? selectedGhanaNetworkCode,
     bool clearCountry = false,
     bool clearPhone = false,
     bool clearOperator = false,
@@ -39,6 +42,7 @@ class DataWizardState {
     bool clearBundle = false,
     bool clearOperatorMetadata = false,
     bool clearIdentifier = false,
+    bool clearGhanaNetwork = false,
   }) {
     return DataWizardState(
       selectedCountry: clearCountry ? null : (selectedCountry ?? this.selectedCountry),
@@ -49,6 +53,7 @@ class DataWizardState {
       selectedBundle: clearBundle ? null : (selectedBundle ?? this.selectedBundle),
       operatorMetadata: clearOperatorMetadata ? null : (operatorMetadata ?? this.operatorMetadata),
       customIdentifier: clearIdentifier ? null : (customIdentifier ?? this.customIdentifier),
+      selectedGhanaNetworkCode: clearGhanaNetwork ? null : (selectedGhanaNetworkCode ?? this.selectedGhanaNetworkCode),
     );
   }
 
@@ -69,6 +74,7 @@ class DataWizardNotifier extends StateNotifier<DataWizardState> {
       clearSelectedOperator: true,
       clearBundle: true,
       clearOperatorMetadata: true,
+      clearGhanaNetwork: true,
     );
   }
 
@@ -80,6 +86,7 @@ class DataWizardNotifier extends StateNotifier<DataWizardState> {
       clearSelectedOperator: true,
       clearBundle: true,
       clearOperatorMetadata: true,
+      clearGhanaNetwork: true,
     );
   }
 
@@ -105,6 +112,10 @@ class DataWizardNotifier extends StateNotifier<DataWizardState> {
 
   void setCustomIdentifier(String identifier) {
     state = state.copyWith(customIdentifier: identifier);
+  }
+
+  void setSelectedGhanaNetwork(int? networkCode) {
+    state = state.copyWith(selectedGhanaNetworkCode: networkCode);
   }
 
   void reset() {

@@ -14,7 +14,17 @@ class GhanaNetworkCodes {
   static const int telecel = 6;      // Telecel
   static const int busy = 8;         // Busy
   static const int surfline = 9;     // Surfline
-  static const int mtnYellow = 13;   // MTN Yellow
+
+  // Network logo assets (used for Ghana-specific selections)
+  static const Map<int, String> _networkLogoAssets = {
+    airtelTigo: 'assets/images/networks/airteltigo.png',
+    glo: 'assets/images/networks/glo.png',
+    mtn: 'assets/images/networks/mtn.png',
+    tigo: 'assets/images/networks/tigo.png',
+    telecel: 'assets/images/networks/telecel.png',
+    busy: 'assets/images/networks/busy.png',
+    surfline: 'assets/images/networks/surfline.png',
+  };
 
   // Mapping from operator IDs to network codes
   static const Map<int, int> _operatorIdToNetworkCode = {
@@ -50,9 +60,6 @@ class GhanaNetworkCodes {
     157: tigo,          // TiGO Ghana
     648: tigo,          // TiGO Ghana Data
     
-    // MTN Yellow
-    158: mtnYellow,     // MTN Yellow Ghana
-    649: mtnYellow,     // MTN Yellow Ghana Data
   };
 
   // Get network code from operator ID
@@ -87,10 +94,12 @@ class GhanaNetworkCodes {
         return 'Busy';
       case surfline:
         return 'Surfline';
-      case mtnYellow:
-        return 'MTN Yellow';
       default:
         return 'Unknown';
     }
+  }
+
+  static String? getNetworkLogoAsset(int networkCode) {
+    return _networkLogoAssets[networkCode];
   }
 }
