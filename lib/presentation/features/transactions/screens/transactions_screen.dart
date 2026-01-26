@@ -1006,170 +1006,176 @@ class _FilterModal extends StatelessWidget {
     final sheetColor = isDark ? AppColors.darkSurface : Colors.white;
     final borderColor = isDark ? AppColors.darkBorder : AppColors.lightBorder;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: sheetColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-        border: Border(top: BorderSide(color: borderColor, width: 1)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle bar
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: borderColor,
-              borderRadius: BorderRadius.circular(2),
-            ),
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: BoxDecoration(
+          color: sheetColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+          border: Border(top: BorderSide(color: borderColor, width: 1)),
+        ),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewPadding.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: borderColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Filter Transactions',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    // Type Filters
+                    Text(
+                      'Transaction Type',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
+                      children: [
+                        _FilterOption(
+                          label: 'All Types',
+                          isSelected: selectedType == null,
+                          onTap: () => onFilterChanged(null, selectedStatus, startDate, endDate),
+                        ),
+                        _FilterOption(
+                          label: 'Airtime',
+                          isSelected: selectedType == 'airtime',
+                          onTap: () => onFilterChanged('airtime', selectedStatus, startDate, endDate),
+                        ),
+                        _FilterOption(
+                          label: 'Data',
+                          isSelected: selectedType == 'data',
+                          onTap: () => onFilterChanged('data', selectedStatus, startDate, endDate),
+                        ),
+                        _FilterOption(
+                          label: 'MOMO',
+                          isSelected: selectedType == 'momo',
+                          onTap: () => onFilterChanged('momo', selectedStatus, startDate, endDate),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    // Date Range Filters
+                    Text(
+                      'Date Range',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DateButton(
+                            label: 'Start Date',
+                            date: startDate,
+                            onTap: () async {
+                              final date = await showDatePicker(
+                                context: context,
+                                initialDate: startDate ?? DateTime.now().subtract(const Duration(days: 30)),
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime.now(),
+                              );
+                              if (date != null) {
+                                onFilterChanged(selectedType, selectedStatus, date, endDate);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: DateButton(
+                            label: 'End Date',
+                            date: endDate,
+                            onTap: () async {
+                              final date = await showDatePicker(
+                                context: context,
+                                initialDate: endDate ?? DateTime.now(),
+                                firstDate: startDate ?? DateTime(2020),
+                                lastDate: DateTime.now(),
+                              );
+                              if (date != null) {
+                                onFilterChanged(selectedType, selectedStatus, startDate, date);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    // Status Filters
+                    Text(
+                      'Status',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
+                      children: [
+                        _FilterOption(
+                          label: 'All Status',
+                          isSelected: selectedStatus == null,
+                          onTap: () => onFilterChanged(selectedType, null, startDate, endDate),
+                        ),
+                        _FilterOption(
+                          label: 'Completed',
+                          isSelected: selectedStatus == 'completed',
+                          onTap: () => onFilterChanged(selectedType, 'completed', startDate, endDate),
+                        ),
+                        _FilterOption(
+                          label: 'Pending',
+                          isSelected: selectedStatus == 'pending',
+                          onTap: () => onFilterChanged(selectedType, 'pending', startDate, endDate),
+                        ),
+                        _FilterOption(
+                          label: 'Failed',
+                          isSelected: selectedStatus == 'failed',
+                          onTap: () => onFilterChanged(selectedType, 'failed', startDate, endDate),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    // Clear Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: () => onFilterChanged(null, null, null, null),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                        ),
+                        child: const Text('Clear All Filters'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Filter Transactions',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                // Type Filters
-                Text(
-                  'Transaction Type',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
-                  children: [
-                    _FilterOption(
-                      label: 'All Types',
-                      isSelected: selectedType == null,
-                      onTap: () => onFilterChanged(null, selectedStatus, startDate, endDate),
-                    ),
-                    _FilterOption(
-                      label: 'Airtime',
-                      isSelected: selectedType == 'airtime',
-                      onTap: () => onFilterChanged('airtime', selectedStatus, startDate, endDate),
-                    ),
-                    _FilterOption(
-                      label: 'Data',
-                      isSelected: selectedType == 'data',
-                      onTap: () => onFilterChanged('data', selectedStatus, startDate, endDate),
-                    ),
-                    _FilterOption(
-                      label: 'MOMO',
-                      isSelected: selectedType == 'momo',
-                      onTap: () => onFilterChanged('momo', selectedStatus, startDate, endDate),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                // Date Range Filters
-                Text(
-                  'Date Range',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DateButton(
-                        label: 'Start Date',
-                        date: startDate,
-                        onTap: () async {
-                          final date = await showDatePicker(
-                            context: context,
-                            initialDate: startDate ?? DateTime.now().subtract(const Duration(days: 30)),
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime.now(),
-                          );
-                          if (date != null) {
-                            onFilterChanged(selectedType, selectedStatus, date, endDate);
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: DateButton(
-                        label: 'End Date',
-                        date: endDate,
-                        onTap: () async {
-                          final date = await showDatePicker(
-                            context: context,
-                            initialDate: endDate ?? DateTime.now(),
-                            firstDate: startDate ?? DateTime(2020),
-                            lastDate: DateTime.now(),
-                          );
-                          if (date != null) {
-                            onFilterChanged(selectedType, selectedStatus, startDate, date);
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                // Status Filters
-                Text(
-                  'Status',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
-                  children: [
-                    _FilterOption(
-                      label: 'All Status',
-                      isSelected: selectedStatus == null,
-                      onTap: () => onFilterChanged(selectedType, null, startDate, endDate),
-                    ),
-                    _FilterOption(
-                      label: 'Completed',
-                      isSelected: selectedStatus == 'completed',
-                      onTap: () => onFilterChanged(selectedType, 'completed', startDate, endDate),
-                    ),
-                    _FilterOption(
-                      label: 'Pending',
-                      isSelected: selectedStatus == 'pending',
-                      onTap: () => onFilterChanged(selectedType, 'pending', startDate, endDate),
-                    ),
-                    _FilterOption(
-                      label: 'Failed',
-                      isSelected: selectedStatus == 'failed',
-                      onTap: () => onFilterChanged(selectedType, 'failed', startDate, endDate),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                // Clear Button
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () => onFilterChanged(null, null, null, null),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-                    ),
-                    child: const Text('Clear All Filters'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -83,9 +83,9 @@ class _ServiceCardState extends State<ServiceCard>
           return Transform.scale(
             scale: _scaleAnimation.value,
             child: Container(
-              width: 80,
+              width: 104,
               padding: const EdgeInsets.symmetric(
-                vertical: AppSpacing.md,
+                vertical: AppSpacing.lg,
                 horizontal: AppSpacing.sm,
               ),
               decoration: BoxDecoration(
@@ -99,8 +99,8 @@ class _ServiceCardState extends State<ServiceCard>
                     clipBehavior: Clip.none,
                     children: [
                       Container(
-                        width: 52,
-                        height: 52,
+                        width: 66,
+                        height: 66,
                         decoration: BoxDecoration(
                           gradient: widget.gradient,
                           borderRadius: BorderRadius.circular(AppRadius.md),
@@ -108,7 +108,7 @@ class _ServiceCardState extends State<ServiceCard>
                         child: Icon(
                           widget.icon,
                           color: Colors.white,
-                          size: 26,
+                          size: 32,
                         ),
                       ),
                       if (widget.isNew)
@@ -149,6 +149,7 @@ class _ServiceCardState extends State<ServiceCard>
                     widget.title,
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
                           fontWeight: FontWeight.w600,
+                          fontSize: 14,
                         ),
                     textAlign: TextAlign.center,
                     maxLines: 2,

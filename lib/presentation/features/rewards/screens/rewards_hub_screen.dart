@@ -191,32 +191,41 @@ class _QuickActions extends StatelessWidget {
               ),
         ),
         const SizedBox(height: AppSpacing.md),
-        Row(
-          children: [
-            Expanded(
-              child: _ActionChip(
-                icon: Icons.bolt_rounded,
-                label: 'Earn',
-                onTap: () => _showComingSoon(context, 'Earn more points'),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: _ActionChip(
-                icon: Icons.card_giftcard_rounded,
-                label: 'Redeem',
-                onTap: () => _showComingSoon(context, 'Redeem rewards'),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: _ActionChip(
-                icon: Icons.history_rounded,
-                label: 'History',
-                onTap: () => _showComingSoon(context, 'Rewards history'),
-              ),
-            ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final chipWidth = (constraints.maxWidth - AppSpacing.sm) / 2;
+
+            return Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: [
+                SizedBox(
+                  width: chipWidth,
+                  child: _ActionChip(
+                    icon: Icons.bolt_rounded,
+                    label: 'Earn',
+                    onTap: () => _showComingSoon(context, 'Earn more points'),
+                  ),
+                ),
+                SizedBox(
+                  width: chipWidth,
+                  child: _ActionChip(
+                    icon: Icons.card_giftcard_rounded,
+                    label: 'Redeem',
+                    onTap: () => _showComingSoon(context, 'Redeem rewards'),
+                  ),
+                ),
+                SizedBox(
+                  width: chipWidth,
+                  child: _ActionChip(
+                    icon: Icons.history_rounded,
+                    label: 'History',
+                    onTap: () => _showComingSoon(context, 'Rewards history'),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ],
     ).animate().fadeIn(delay: 80.ms).slideY(begin: 0.06, end: 0);

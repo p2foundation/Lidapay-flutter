@@ -104,6 +104,13 @@ class _EnterPhoneScreenState extends ConsumerState<EnterPhoneScreen> {
           _isDetecting = false;
           _error = null; // ensure any previous error is cleared
         });
+        if (country.code == 'GH') {
+          final autoNetwork = GhanaNetworkCodes.fromAutodetectResult(response.data!);
+          setState(() {
+            _selectedGhanaNetwork = autoNetwork;
+          });
+          ref.read(airtimeWizardProvider.notifier).setSelectedGhanaNetwork(autoNetwork);
+        }
         // Store full phone number (with country code) for use in confirm screen
         ref.read(airtimeWizardProvider.notifier)
           ..setPhoneNumber(fullPhoneNumber)
@@ -180,10 +187,11 @@ class _EnterPhoneScreenState extends ConsumerState<EnterPhoneScreen> {
     if (_detectedOperator != null) {
       final country = ref.read(airtimeWizardProvider).selectedCountry;
       if (country?.code == 'GH' && _selectedGhanaNetwork == null) {
+        final autoNetwork = GhanaNetworkCodes.fromAutodetectResult(_detectedOperator!);
         setState(() {
-          _error = 'Please select the operating network.';
+          _selectedGhanaNetwork = autoNetwork;
         });
-        return;
+        ref.read(airtimeWizardProvider.notifier).setSelectedGhanaNetwork(autoNetwork);
       }
       context.push('/airtime/select-amount');
     }
@@ -746,8 +754,7 @@ class _EnterPhoneScreenState extends ConsumerState<EnterPhoneScreen> {
   }
 
   Widget _buildNavigationButtons(BuildContext context) {
-    final isGhana = ref.read(airtimeWizardProvider).selectedCountry?.code == 'GH';
-    final canContinue = _detectedOperator != null && (!isGhana || _selectedGhanaNetwork != null);
+    final canContinue = _detectedOperator != null;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(

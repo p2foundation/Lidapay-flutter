@@ -357,7 +357,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 isPopular: true,
                 onTap: () => context.push('/airtime/select-country'),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              const SizedBox(width: AppSpacing.xs),
               ServiceCard(
                 icon: Icons.wifi_rounded,
                 title: 'Data',
@@ -365,7 +365,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 isCompact: true,
                 onTap: () => context.push('/data/select-country'),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              const SizedBox(width: AppSpacing.xs),
               ServiceCard(
                 icon: Icons.swap_horiz_rounded,
                 title: 'Convert',
@@ -376,7 +376,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 isNew: true,
                 onTap: () => context.push('/airtime/converter'),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              const SizedBox(width: AppSpacing.xs),
               ServiceCard(
                 icon: Icons.receipt_long_rounded,
                 title: 'Bills',
@@ -386,7 +386,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 isCompact: true,
                 onTap: () => context.push('/airtime'),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              const SizedBox(width: AppSpacing.xs),
               ServiceCard(
                 icon: Icons.more_horiz_rounded,
                 title: 'More',
